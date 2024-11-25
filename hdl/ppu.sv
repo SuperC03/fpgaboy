@@ -44,7 +44,9 @@ module PixelProcessingUnit(
                 end
             end
             HBlank: begin
-                // Do HBlank stuff.
+                ///@brief HBlank portion of the scanline; for syncing.
+                ///@note All fetcher and FIFO operations are done stopped.
+                ///@note Resets all registers to prep for the next scanline.
 
                 ///@brief end of scanline, evolve.
                 if (T == 455) begin
@@ -57,14 +59,18 @@ module PixelProcessingUnit(
                 end
             end
             VBlank: begin
-                // Do VBlank stuff.
+                ///@brief VBlank portion of the scanline; for syncing.
+                ///@note All fetcher and FIFO operations are done stopped.
+                ///@note Resets all registers to prep for the next scanline.
 
                 ///@brief end of VBlank, move to OAMScan.
-                if (LY == 153) begin
-                    state <= OAMScan;
-                    LY <= 0;
-                end else begin
-                    LY <= LY + 1;
+                if (T == 455) begin
+                    if (LY == 153) begin
+                        state <= OAMScan;
+                        LY <= 0;
+                    end else begin
+                        LY <= LY + 1;
+                    end
                 end
             end
         endcase
