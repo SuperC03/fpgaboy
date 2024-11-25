@@ -2,6 +2,15 @@
 _history/
 obj/
 
+# MacOS files.
+.DS_Store
+
+# iverilog generated files
+*.out
+*.vvp
+*.vcd
+
+
 # Python virtual environments
 env/
 .env/
