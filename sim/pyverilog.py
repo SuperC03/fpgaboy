@@ -109,7 +109,7 @@ class Buffer(Wire):
     def value(self) -> int:
         return self._value
 
-    def tick(self) -> None:
+    async def tick(self) -> None:
         """
         Updates the value of the buffer wire.
 
@@ -158,7 +158,7 @@ class Module(ABC):
         self.name = name
 
     @abstractmethod
-    def tick(self) -> None:
+    async def tick(self) -> None:
         """
         Updates the values of the output wires.
 
@@ -185,3 +185,100 @@ class Module(ABC):
     def outputs(self) -> dict[str, Wire]:
         """The output wires to the module."""
         return self._outputs
+
+
+class Sequential(Module):
+    """A class that represents a sequential module."""
+
+    def __init__(
+        self, inputs: dict[str, Wire], outputs: dict[str, Wire], name: str = None
+    ):
+        """
+        Instantiates a Sequential module with inputs and outputs.
+
+        Args:
+            inputs (dict[str, Wire]): The input wires to the module.
+            outputs (dict[str, Wire]): The output wires to the module.
+            name (str): The name of the module.
+
+        Returns:
+            None: Nothing.
+
+        Preconditions:
+            - The inputs and outputs are dictionaries of strings to Wires.
+            - The name is a string.
+
+        Postconditions:
+            - The module is created with the specified inputs, outputs, and name.
+        """
+        super().__init__(inputs, outputs, name)
+        self._clock = inputs["clock"]
+
+    @abstractmethod
+    async def tick(self) -> None:
+        """
+        Updates the values of the output wires.
+
+        Args:
+            None: Nothing.
+
+        Returns:
+            None: Nothing.
+
+        Preconditions:
+            - The clock is high.
+
+        Postconditions:
+            - The values of the output wires are updated.
+        """
+        raise NotImplementedError("tick() must be implemented in a subclass")
+
+
+class Combinational(Module):
+    """A class that represents a combinational module."""
+
+    def __init__(
+        self, inputs: dict[str, Wire], outputs: dict[str, Wire], name: str = None
+    ):
+        """
+        Instantiates a Combinational module with inputs and outputs.
+
+        Args:
+            inputs (dict[str, Wire]): The input wires to the module.
+            outputs (dict[str, Wire]): The output wires to the module.
+            name (str): The name of the module.
+
+        Returns:
+            None: Nothing.
+
+        Preconditions:
+            - The inputs and outputs are dictionaries of strings to Wires.
+            - The name is a string.
+
+        Postconditions:
+            - The module is created with the specified inputs, outputs, and name.
+        """
+        # Checks none of the output wires are buffers.
+        for output in outputs.values():
+            if isinstance(output, Buffer):
+                raise ValueError("Output wires cannot be buffers")
+        super().__init__(inputs, outputs, name)
+
+    @abstractmethod
+    def tick(self) -> None:
+        """
+        Updates the values of the output wires.
+
+        Args:
+            None: Nothing.
+
+        Returns:
+            None: Nothing.
+
+        Preconditions:
+            - The values of the input wires are updated.
+
+        Postconditions:
+            - The values of the output wires are updated.
+        """
+        raise NotImplementedError("tick() must be implemented in a subclass")
