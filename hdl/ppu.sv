@@ -15,7 +15,7 @@ module PixelProcessingUnit(
     // The X register, which pixel we are on.
     logic [$clog2(160)-1:0] X;
     // Keeps track of the number of T-cycles elapsed.
-    logic [$clog2(456):0] T;
+    logic [$clog2(456)-1:0] T;
     evt_counter #(.MAX_COUNT(456)) tCounter (
         .clk_in(clk_in),
         .rst_in(rst_in),

@@ -5,7 +5,7 @@ module evt_counter
   ( input wire          clk_in,
     input wire          rst_in,
     input wire          evt_in,
-    output logic[$clog2(MAX_COUNT):0]  count_out
+    output logic[$clog2(MAX_COUNT)-1:0]  count_out
   );
  
   always_ff @(posedge clk_in) begin
