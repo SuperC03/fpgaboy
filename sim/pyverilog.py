@@ -265,7 +265,7 @@ class Combinational(Module):
         super().__init__(inputs, outputs, name)
 
     @abstractmethod
-    def tick(self) -> None:
+    async def tick(self) -> None:
         """
         Updates the values of the output wires.
 
