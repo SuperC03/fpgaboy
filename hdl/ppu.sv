@@ -53,15 +53,28 @@ module PixelProcessingUnit(
     logic [7:0] STAT;
     // Current sprite being examined.
     localparam NUM_SPRITES = 40;
-    logic [$clog2(NUM_SPRITES)-1:0] n_sprite;
-    assign n_sprite = T[$clog2(NUM_SPRITES)-1:1];
+    logic [$clog2(NUM_SPRITES)-1:0] sprite;
+    assign sprite = T[$clog2(NUM_SPRITES)-1:1];
     // Whether or not to add the current sprite to the sprite buffer.
     logic add_sprite;
 
+    // Instantiates the sprite buffer.
+    localparam SPRITE_BUFFER_SIZE = 10;
+    logic [7:0] sprite_buffer [$clog2(SPRITE_BUFFER_SIZE)-1:0];
+    logic [$clog2(SPRITE_BUFFER_SIZE)-1:0] n_sprites;
+    // Instantiates the sprite buffer counter.
+    evt_counter #(.MAX_COUNT(SPRITE_BUFFER_SIZE+1)) spriteBufferCounter (
+        .clk_in(clk_in),
+        .rst_in(rst_in),
+        .evt_in(add_sprite),
+        .count_out(n_sprites)
+    );
+
     // Instantiate the OAM scan module.
-    OAMScan #(
+    OAMScanner #(
         .TOTAL_SCANLINES(TOTAL_SCANLINES),
-        .NUM_SPRITES(NUM_SPRITES)
+        .NUM_SPRITES(NUM_SPRITES),
+        .BUFFER_MAX(SPRITE_BUFFER_SIZE)
     ) oamScan (
         .clk_in(clk_in),
         .rst_in(rst_in),
@@ -70,11 +83,13 @@ module PixelProcessingUnit(
         .LY_in(LY),
         .tall_sprite_mode_in(LCDC[2]),
 
-        .sprite_in(n_sprite),
+        .sprite_in(sprite),
         .data_in(data_in),
         .data_valid_in(data_valid_in),
         
         .parity_in(T[0]),
+
+        .addr_out(addr_out),
         .add_sprite_out(add_sprite)
     );
 
@@ -88,6 +103,11 @@ module PixelProcessingUnit(
             OAMScan: begin
                 // Scans the Object Attribute Memory for relevant sprites.
                 // Scans a new sprite from OAM every 2 T-cycles.
+                if (add_sprite) begin
+                    sprite_buffer[n_sprites] <= data_in;
+                end
+
+                
 
                 ///@brief end of OAM scan, move to Draw.
                 if (T == 79) begin
@@ -141,9 +161,10 @@ module PixelProcessingUnit(
 endmodule
 
 
-module OAMScan #(
+module OAMScanner #(
     parameter TOTAL_SCANLINES = 154,
-    parameter NUM_SPRITES = 40
+    parameter NUM_SPRITES = 40,
+    parameter BUFFER_MAX = 10
 ) (
     // Standard clock and reset signals.
     input wire clk_in,
@@ -161,6 +182,8 @@ module OAMScan #(
     input wire [$clog2(NUM_SPRITES)-1:0] sprite_in,
     input wire [7:0] data_in,
     input wire data_valid_in,
+    // The number of sprites in the sprite buffer.
+    input wire [$clog2(BUFFER_MAX)-1:0] n_sprites,
     // Whether we're receiving Y or X data (if parity == 0, Y; else X).
     input wire parity_in,
 
@@ -192,7 +215,7 @@ module OAMScan #(
                 * @note Sprites are not visible if x=0 as the screen X coordinate 
                 *       starts at 8 and sprites are 8 pixels wide.
                 */
-                add_sprite_out <= data_in > 0 ? y_res : 1'b0;
+                add_sprite_out <= (data_in > 0) ? y_res && n_sprites < BUFFER_MAX : 1'b0;
                 // Resets the y_res signal in preparation for the next sprite.
                 y_res <= 0;
             end else begin
