@@ -9,22 +9,37 @@ module PixelProcessingUnit(
 
     // The T-cycle clock.
     input wire tclk_in,
+    // The M-cycle clock.
+    input wire mclk_in,
     
-    // Data bus for memory.
-    input wire [7:0] data_in,
-    input wire data_valid_in,
-    // The LCDC and STAT register updates.
+    // The LCDC and STAT registers | $FF40 and $FF41.
     input wire [7:0] LCDC_in,
     input wire [7:0] STAT_in,
-    // The LYC register.
+    // The SCY and SCX registers | $FF42 and $FF43.
+    input wire [7:0] SCY_in,
+    input wire [7:0] SCX_in,
+    // Exposing the LY register | $FF44.
+    output logic [7:0] LY_out,
+    // LYC register | $FF45.
     input wire [7:0] LYC_in,
-    
-    // The LCDC and STAT register outputs.
-    output wire [7:0] LCDC_out,
-    output wire [7:0] STAT_out,
-    // Data bus requests.
-    output wire [15:0] addr_out,
-    output wire valid_out
+    // The BGP, OBP0, and OBP1 registers | $FF47, $FF48, and $FF49.
+    input wire [7:0] BGP_in,
+    input wire [7:0] OBP0_in,
+    input wire [7:0] OBP1_in,
+    // The WY and WX registers | $FF4A and $FF4B.
+    input wire [7:0] WY_in,
+    input wire [7:0] WX_in,
+
+    // The data requested from memory.
+    output logic [15:0] addr_out,
+    input wire [7:0] data_in,
+    input wire data_valid_in,
+    // The data to be output to the LCD.
+    output logic pixel_out,
+    // The mode of the PPU.
+    output logic [1:0] mode_out,
+    // The LY = LYC signal.
+    output logic ly_eq_lyc_out
 );
     // Enum for the different states of the PPU.
     typedef enum logic[1:0] {HBlank=0, VBlank=1, OAMScan=2, Draw=3} PPUState;
@@ -48,9 +63,6 @@ module PixelProcessingUnit(
         .count_out(T)
     );
 
-    // The current LCDC and STAT registers.
-    logic [7:0] LCDC;
-    logic [7:0] STAT;
     // Current sprite being examined.
     localparam NUM_SPRITES = 40;
     logic [$clog2(NUM_SPRITES)-1:0] sprite;
@@ -81,7 +93,7 @@ module PixelProcessingUnit(
 
         .tclk_in(tclk_in),
         .LY_in(LY),
-        .tall_sprite_mode_in(LCDC[2]),
+        .tall_sprite_mode_in(LCDC_in[2]),
 
         .sprite_in(sprite),
         .data_in(data_in),
@@ -94,10 +106,6 @@ module PixelProcessingUnit(
     );
 
     always_ff @(posedge tclk_in) begin
-        //Update the LCDC and STAT registers.
-        LCDC <= LCDC_in;
-        STAT <= {STAT_in[7:3], 1'(LY == LYC_in), 2'(state)};
-
         // State evolution
         case (state)
             OAMScan: begin
@@ -106,8 +114,6 @@ module PixelProcessingUnit(
                 if (add_sprite) begin
                     sprite_buffer[n_sprites] <= data_in;
                 end
-
-                
 
                 ///@brief end of OAM scan, move to Draw.
                 if (T == 79) begin
@@ -144,20 +150,21 @@ module PixelProcessingUnit(
 
                 ///@brief end of VBlank, move to OAMScan.
                 if (T == 455) begin
-                    if (LY == 153) begin
+                    if (LY == $clog2(TOTAL_SCANLINES)'(TOTAL_SCANLINES-1)) begin
                         state <= OAMScan;
-                        LY <= 0;
+                        LY <= $clog2(TOTAL_SCANLINES)'(0);
                     end else begin
-                        LY <= LY + 1;
+                        LY <= LY + $clog2(TOTAL_SCANLINES)'(1);
                     end
                 end
             end
         endcase
     end
 
-    // Output the LCDC and STAT registers.
-    assign LCDC_out = LCDC;
-    assign STAT_out = STAT;
+    // Output the PPU-exposed signals.
+    assign LY_out = LY;
+    assign mode_out = state;
+    assign ly_eq_lyc_out = (LY == LYC_in);
 endmodule
 
 
@@ -217,7 +224,7 @@ module OAMScanner #(
                 */
                 add_sprite_out <= (data_in > 0) ? y_res && n_sprites < BUFFER_MAX : 1'b0;
                 // Resets the y_res signal in preparation for the next sprite.
-                y_res <= 0;
+                y_res <= 1'b0;
             end else begin
                 // If reading the Y data, check if the sprite is on the current scanline.
                 /**
@@ -228,10 +235,37 @@ module OAMScanner #(
                 y_res <=(data_in <= LY_plus) &&
                 // Tall sprites are 16 pixels tall, while short sprites are 8 pixels tall.
                         (LY_plus < y_res + 4'h8 << tall_sprite_mode_in);
-                add_sprite_out <= 0;
+                add_sprite_out <= 1'b0;
             end
         end
     end
+endmodule
+
+
+module PixelFetcher #(
+    parameter X_MAX = 160
+) (
+    // Standard clock and reset signals.
+    input wire clk_in,
+    input wire rst_in,
+
+    // The T-cycle clock.
+    input wire tclk_in,
+
+    // Access to the internal X position counter.
+    input wire [$clog2(X_MAX)-1:0] X_in,
+    // Wire to tell the fetcher has completed a pixel push to LCD.
+    output wire advance_X_out    
+);
+    // Defines the 4 states that takes 2 T-cycles each.
+    typedef enum logic[1:0] {
+        FetchTileNum = 0, 
+        FetchTimeDataLow = 1, 
+        FetchTileDataHigh = 2, 
+        Push2FIFO = 3
+    } FetcherState;
+
+
 endmodule
 
 `default_nettype wire
