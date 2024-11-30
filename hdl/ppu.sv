@@ -63,6 +63,51 @@ module PixelProcessingUnit(
         .count_out(T)
     );
 
+    // Centralized state machine for the PPU.
+    always_ff @(posedge clk_in) begin
+        // State evolution
+        case (state)
+            OAMScan: begin
+                ///@brief All 40 sprites are scanned in OAM, 2 T-cycles each.
+                if (T == 80) begin
+                    state <= Draw;
+                end
+            end
+            Draw: begin
+                ///@brief 160 pixels are drawn, variable T-cycles.
+                if (X == 160) begin
+                    state <= HBlank;
+                end
+            end
+            HBlank: begin
+                ///@brief HBlank portion of the scanline; for syncing pads to 456 T-cycles.
+                if (T == 456) begin
+                    if (LY == 144) begin
+                        state <= VBlank;
+                    end else begin
+                        state <= OAMScan;
+                    end
+                end
+            end
+
+            VBlank: begin
+                ///@brief VBlank portion of the scanline; for syncing.
+                ///@note All fetcher and FIFO operations are done stopped.
+                ///@note Resets all registers to prep for the next scanline.
+
+                ///@brief end of VBlank, move to OAMScan.
+                if (T == 455) begin
+                    if (LY == $clog2(TOTAL_SCANLINES)'(TOTAL_SCANLINES-1)) begin
+                        state <= OAMScan;
+                        LY <= $clog2(TOTAL_SCANLINES)'(0);
+                    end else begin
+                        LY <= LY + $clog2(TOTAL_SCANLINES)'(1);
+                    end
+                end
+            end
+        endcase
+    end
+
     // Current sprite being examined.
     localparam NUM_SPRITES = 40;
     logic [$clog2(NUM_SPRITES)-1:0] sprite;
@@ -107,58 +152,13 @@ module PixelProcessingUnit(
 
     always_ff @(posedge tclk_in) begin
         // State evolution
-        case (state)
-            OAMScan: begin
-                // Scans the Object Attribute Memory for relevant sprites.
-                // Scans a new sprite from OAM every 2 T-cycles.
-                if (add_sprite) begin
-                    sprite_buffer[n_sprites] <= data_in;
-                end
-
-                ///@brief end of OAM scan, move to Draw.
-                if (T == 79) begin
-                    state <= Draw;
-                end
+        if (state == OAMScan) begin
+            // Scans the Object Attribute Memory for relevant sprites.
+            // Scans a new sprite from OAM every 2 T-cycles.
+            if (add_sprite) begin
+                sprite_buffer[n_sprites] <= data_in;
             end
-            Draw: begin
-                // Do draw stuff.
-
-                ///@brief end of scanline, move to HBlank.
-                if (X == 159) begin
-                    state <= HBlank;
-                end
-            end
-            HBlank: begin
-                ///@brief HBlank portion of the scanline; for syncing.
-                ///@note All fetcher and FIFO operations are done stopped.
-                ///@note Resets all registers to prep for the next scanline.
-
-                ///@brief end of scanline, evolve.
-                if (T == 455) begin
-                    if (LY == 143) begin
-                        state <= VBlank;
-                    end else begin
-                        state <= OAMScan;
-                    end
-                    X <= 0;
-                end
-            end
-            VBlank: begin
-                ///@brief VBlank portion of the scanline; for syncing.
-                ///@note All fetcher and FIFO operations are done stopped.
-                ///@note Resets all registers to prep for the next scanline.
-
-                ///@brief end of VBlank, move to OAMScan.
-                if (T == 455) begin
-                    if (LY == $clog2(TOTAL_SCANLINES)'(TOTAL_SCANLINES-1)) begin
-                        state <= OAMScan;
-                        LY <= $clog2(TOTAL_SCANLINES)'(0);
-                    end else begin
-                        LY <= LY + $clog2(TOTAL_SCANLINES)'(1);
-                    end
-                end
-            end
-        endcase
+        end
     end
 
     // Output the PPU-exposed signals.
