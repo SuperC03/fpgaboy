@@ -7,9 +7,8 @@ module PixelProcessingUnit(
     input wire clk_in,
     input wire rst_in,
 
-    // The T-cycle clock.
+    // The T-cycle and M-cycle clocks.
     input wire tclk_in,
-    // The M-cycle clock.
     input wire mclk_in,
     
     // The LCDC and STAT registers | $FF40 and $FF41.
@@ -46,57 +45,69 @@ module PixelProcessingUnit(
     PPUState state;
 
     // The LY register, which scanline we are on.
-    parameter VISIBLE_SCANLINES = 144;
-    parameter VBLANK_SCANLINES = 10;
-    parameter TOTAL_SCANLINES = VISIBLE_SCANLINES + VBLANK_SCANLINES;
+    localparam VISIBLE_SCANLINES = 144;
+    localparam VBLANK_SCANLINES = 10;
+    localparam TOTAL_SCANLINES = VISIBLE_SCANLINES + VBLANK_SCANLINES;
     logic [$clog2(TOTAL_SCANLINES)-1:0] LY;
     // The X register, which pixel we are on.
     localparam X_MAX = 160;
     logic [$clog2(X_MAX)-1:0] X;
+    logic pixel_pushed;
+    evt_counter #(.MAX_COUNT(X_MAX)) xCounter (
+        .clk_in(clk_in),
+        .rst_in(rst_in),
+        .evt_in(pixel_pushed),
+        .count_out(X)
+    );
     // Keeps track of the number of T-cycles elapsed.
     localparam T_MAX = 456;
     logic [$clog2(T_MAX)-1:0] T;
     evt_counter #(.MAX_COUNT(T_MAX)) tCounter (
         .clk_in(clk_in),
         .rst_in(rst_in),
-        .evt_in(clk_in),
+        .evt_in(tclk_in),
         .count_out(T)
     );
+    // Number of T-Cycles needed to scan a sprite.
+    localparam NUM_SPRITES = 40;
+    localparam SPRITE_T_CYCLES = 2;
+    localparam OAM_SCAN_T_CYCLES = NUM_SPRITES * SPRITE_T_CYCLES;
 
     // Centralized state machine for the PPU.
     always_ff @(posedge clk_in) begin
         // State evolution
         case (state)
+            ///@brief All 40 sprites are scanned in OAM, 2 T-cycles each.
             OAMScan: begin
-                ///@brief All 40 sprites are scanned in OAM, 2 T-cycles each.
-                if (T == 80) begin
+                if (T == $clog2(T_MAX)'(OAM_SCAN_T_CYCLES-1) && tclk_in) begin
                     state <= Draw;
                 end
             end
             Draw: begin
                 ///@brief 160 pixels are drawn, variable T-cycles.
-                if (X == 160) begin
+                if (X == $clog2(X_MAX)'(X_MAX-1) && pixel_pushed) begin
                     state <= HBlank;
                 end
             end
+            /**
+            * @brief    HBlank portion of the scanline; for syncing pads to 
+            *           456 T-cycles.
+            */
             HBlank: begin
-                ///@brief HBlank portion of the scanline; for syncing pads to 456 T-cycles.
-                if (T == 456) begin
-                    if (LY == 144) begin
+                if (T == $clog2(T_MAX)'(T_MAX-1) && tclk_in) begin
+                    if (LY == $clog2(TOTAL_SCANLINES)'(VISIBLE_SCANLINES-1)) begin
                         state <= VBlank;
                     end else begin
                         state <= OAMScan;
                     end
                 end
             end
-
+            /**
+            * @brief    VBlank portion of the scanline; for syncing and 10 
+            *           scanlines of VRAM and OAM access.
+            */
             VBlank: begin
-                ///@brief VBlank portion of the scanline; for syncing.
-                ///@note All fetcher and FIFO operations are done stopped.
-                ///@note Resets all registers to prep for the next scanline.
-
-                ///@brief end of VBlank, move to OAMScan.
-                if (T == 455) begin
+                if (T == $clog2(T_MAX)'(T_MAX-1) && tclk_in) begin
                     if (LY == $clog2(TOTAL_SCANLINES)'(TOTAL_SCANLINES-1)) begin
                         state <= OAMScan;
                         LY <= $clog2(TOTAL_SCANLINES)'(0);
@@ -109,9 +120,8 @@ module PixelProcessingUnit(
     end
 
     // Current sprite being examined.
-    localparam NUM_SPRITES = 40;
     logic [$clog2(NUM_SPRITES)-1:0] sprite;
-    assign sprite = T[$clog2(NUM_SPRITES)-1:1];
+    assign sprite = T[$clog2(NUM_SPRITES):1];
     // Whether or not to add the current sprite to the sprite buffer.
     logic add_sprite;
 
@@ -137,6 +147,8 @@ module PixelProcessingUnit(
         .rst_in(rst_in),
 
         .tclk_in(tclk_in),
+        .mclk_in(mclk_in),
+
         .LY_in(LY),
         .tall_sprite_mode_in(LCDC_in[2]),
 
@@ -150,10 +162,9 @@ module PixelProcessingUnit(
         .add_sprite_out(add_sprite)
     );
 
+    // Scans the Object Attribute Memory for relevant sprites.
     always_ff @(posedge tclk_in) begin
-        // State evolution
         if (state == OAMScan) begin
-            // Scans the Object Attribute Memory for relevant sprites.
             // Scans a new sprite from OAM every 2 T-cycles.
             if (add_sprite) begin
                 sprite_buffer[n_sprites] <= data_in;
@@ -177,8 +188,9 @@ module OAMScanner #(
     input wire clk_in,
     input wire rst_in,
 
-    // The T-cycle clock.
+    // The T and M-cycle clocks.
     input wire tclk_in,
+    input wire mclk_in,
 
     // Access wire to the LY register.
     input wire [$clog2(TOTAL_SCANLINES)-1:0] LY_in,
