@@ -23,17 +23,21 @@ async def reset(dut):
     dut.rst_in.value = 0b0;
     await ClockCycles(dut.clk_in, 2, rising=False)
 
-@cocotb.test()
-async def test_within_capacity(dut):
-    """Tests the FIFO without reading or writing more than the capacity limits."""
-    # Seeds the RNG.
-    rng: random.Random = random.Random(42)
-    # Sets up the FIFO.
+
+async def setup(dut):
+    """Sets up the FIFO."""
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
     dut.wr_en.value = 0b0;
     dut.rd_en.value = 0b0;
     dut.data_in.value = 0x00;
     await reset(dut)
+
+@cocotb.test()
+async def test_within_capacity(dut):
+    """Tests the FIFO without reading or writing more than the capacity limits."""
+    # Seeds the RNG.
+    rng: random.Random = random.Random(42)
+    await setup(dut)
 
     # Creates a deque of similar limit.
     FIFO: deque = deque([], DEPTH)
@@ -69,6 +73,48 @@ async def test_within_capacity(dut):
             # Tests the stability of intermittent reads.
             await ClockCycles(dut.clk_in, rng.randint(0, DEPTH // 2), rising=False)
     
+@cocotb.test()
+async def test_overreading(dut):
+    """Tests the FIFO after reading over the capacity of the FIFO."""
+    rng: random.Random = random.Random(42)
+    await setup(dut)# Creates a deque of similar limit.
+    FIFO: deque = deque([], DEPTH)
+
+    for _ in range(DEPTH * 4):
+        inserts: int = rng.randint(0, DEPTH)
+        removals: int = inserts + rng.randint(0, DEPTH)
+
+        # Inserts n elements in n clock cycles.
+        for _ in range(inserts):
+            await FallingEdge(dut.clk_in)
+            element: int = rng.getrandbits(WIDTH)
+            dut.wr_en.value = 0b1
+            dut.data_in.value = element
+            FIFO.append(element)
+            await ClockCycles(dut.clk_in, 1, rising=False)
+            dut.wr_en.value = 0b0
+            assert (occ := dut.occupancy_out.value) == (deq := len(FIFO)), f"Expected occupancy {deq} not {occ}"
+            # Tests the stability of intermittent writes.
+            await ClockCycles(dut.clk_in, rng.randint(0, DEPTH // 2), rising=False)
+        
+        # Removes up to 2*n elements in as many cycles.
+        for _ in range(removals):
+            await FallingEdge(dut.clk_in)
+            dut.rd_en.value = 0b1
+            started_empty: bool = len(FIFO) == 0
+            ref: int = FIFO.popleft() if not started_empty else None
+            await ClockCycles(dut.clk_in, 1, rising=False)
+            dut.rd_en.value = 0b0
+
+            if not started_empty:
+                assert dut.data_valid_out.value == 0b1, "Expected 1-cycle reads."
+                assert (out := dut.data_out.value) == ref, f"Received {out} instead of {ref}"
+            else:
+                assert dut.data_valid_out.value == 0b0, "FIFO is empty, no reads out."
+
+            # Tests the stability of intermittent reads.
+            await ClockCycles(dut.clk_in, rng.randint(0, DEPTH // 2), rising=False)
+
 
 def fifo_runner():
     """Simulate the FIFO hdl using cocotb."""
