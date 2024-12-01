@@ -19,6 +19,15 @@ module cpu (
   output logic [7:0] mem_out,
   output logic mem_write
 );
+
+  // CPU Registers
+  logic [15:0] af_reg; // Accumulator and Flags registers
+  logic [15:0] bc_reg; // B and C registers
+  logic [15:0] de_reg; // D and E registers
+  logic [15:0] hl_reg; // H and L registers
+  logic [15:0] sp_reg; // Stack Pointer register
+  logic [15:0] pc_reg; // Program Counter register
+
   
 endmodule // cpu
 
