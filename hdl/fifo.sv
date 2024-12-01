@@ -17,7 +17,7 @@ module FIFO #(
     // FIFO data signals
     output logic [WIDTH-1:0] data_out,
     output logic data_valid_out,
-    output logic occupancy_out
+    output logic [$clog2(DEPTH):0] occupancy_out
 );
     // The FIFO memory.
     logic [WIDTH-1:0] mem [DEPTH-1:0];
@@ -31,8 +31,8 @@ module FIFO #(
     logic read;
     logic write;
     always_comb begin
-        write = wr_en && (occupancy < $clog2(DEPTH)'(DEPTH));
-        read = rd_en && (occupancy > $clog2(DEPTH)'(0));
+        write = wr_en && (occupancy < ($clog2(DEPTH)+1)'(DEPTH));
+        read = rd_en && (occupancy > ($clog2(DEPTH)+1)'(0));
     end
 
     always_ff @(posedge clk_in) begin
@@ -40,30 +40,37 @@ module FIFO #(
             rd_ptr <= $clog2(DEPTH)'(0);
             wr_ptr <= $clog2(DEPTH)'(0);
             for (int i = 0; i < DEPTH; i++) begin
-                mem[i] <= 0;
+                mem[i] <= WIDTH'(0);
             end
+            occupancy <= ($clog2(DEPTH)+1)'(0);
+            data_out <= WIDTH'(0);
+            data_valid_out <= 1'b0;
         end else begin
             if (write) begin
                 mem[wr_ptr] <= data_in;
                 wr_ptr <= (wr_ptr >= $clog2(DEPTH)'(DEPTH -  1)) ? 
-                        $clog2(DEPTH)'(0) : wr_ptr + 1;
+                        $clog2(DEPTH)'(0) : wr_ptr + $clog2(DEPTH)'(1);
             end
             
             if (read) begin
                 data_out <= mem[rd_ptr];
                 data_valid_out <= 1'b1;
-                rd_ptr <= (rd_ptr > $clog2(DEPTH)'(1'b0)) ? 
-                        $clog2(DEPTH)'(rd_ptr - 1) : $clog2(DEPTH)'(DEPTH - 1);
+                rd_ptr <= (rd_ptr >= $clog2(DEPTH)'(DEPTH -  1)) ? 
+                        $clog2(DEPTH)'(0) : rd_ptr + $clog2(DEPTH)'(1);
+            end else begin
+                data_valid_out <= 1'b0;
             end
 
             // Handles the simultaneous read-write case on occupancies.
             if (write && !read) begin
-                occupancy <= occupancy + 1;
+                occupancy <= occupancy + ($clog2(DEPTH)+1)'(1);
             end else if (!write && read) begin
-                occupancy <= occupancy - 1;
+                occupancy <= occupancy - ($clog2(DEPTH)+1)'(1);
             end
         end
     end
+
+    assign occupancy_out = occupancy;
 endmodule
 
 `default_nettype wire
