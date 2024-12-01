@@ -17,7 +17,8 @@ module FIFO #(
     // FIFO data signals
     output logic [WIDTH-1:0] data_out,
     output logic data_valid_out,
-    output logic [$clog2(DEPTH):0] occupancy_out
+    output logic [$clog2(DEPTH):0] occupancy_out,
+    output logic full_out
 );
     // The FIFO memory.
     logic [WIDTH-1:0] mem [DEPTH-1:0];
@@ -71,6 +72,7 @@ module FIFO #(
     end
 
     assign occupancy_out = occupancy;
+    assign full_out = occupancy == ($clog2(DEPTH)+1)'(DEPTH);
 endmodule
 
 `default_nettype wire

@@ -63,7 +63,7 @@ module PixelProcessingUnit(
     localparam T_MAX = 456;
     logic [$clog2(T_MAX)-1:0] T;
     evt_counter #(.MAX_COUNT(T_MAX)) tCounter (
-        .clk_in(clk_in),
+        .clk_in(tclk_in),
         .rst_in(rst_in),
         .evt_in(tclk_in),
         .count_out(T)
@@ -74,12 +74,12 @@ module PixelProcessingUnit(
     localparam OAM_SCAN_T_CYCLES = NUM_SPRITES * SPRITE_T_CYCLES;
 
     // Centralized state machine for the PPU.
-    always_ff @(posedge clk_in) begin
+    always_ff @(posedge tclk_in) begin
         // State evolution
         case (state)
             ///@brief All 40 sprites are scanned in OAM, 2 T-cycles each.
             OAMScan: begin
-                if (T == $clog2(T_MAX)'(OAM_SCAN_T_CYCLES-1) && tclk_in) begin
+                if (T == $clog2(T_MAX)'(OAM_SCAN_T_CYCLES-1)) begin
                     state <= Draw;
                 end
             end
@@ -94,7 +94,7 @@ module PixelProcessingUnit(
             *           456 T-cycles.
             */
             HBlank: begin
-                if (T == $clog2(T_MAX)'(T_MAX-1) && tclk_in) begin
+                if (T == $clog2(T_MAX)'(T_MAX-1)) begin
                     if (LY == $clog2(TOTAL_SCANLINES)'(VISIBLE_SCANLINES-1)) begin
                         state <= VBlank;
                     end else begin
@@ -107,7 +107,7 @@ module PixelProcessingUnit(
             *           scanlines of VRAM and OAM access.
             */
             VBlank: begin
-                if (T == $clog2(T_MAX)'(T_MAX-1) && tclk_in) begin
+                if (T == $clog2(T_MAX)'(T_MAX-1)) begin
                     if (LY == $clog2(TOTAL_SCANLINES)'(TOTAL_SCANLINES-1)) begin
                         state <= OAMScan;
                         LY <= $clog2(TOTAL_SCANLINES)'(0);
@@ -169,6 +169,14 @@ module PixelProcessingUnit(
             if (add_sprite) begin
                 sprite_buffer[n_sprites] <= data_in;
             end
+        end
+    end
+
+    // Pushes pixels to the LCD.
+    always_ff @(posedge tclk_in) begin
+        if (state == Draw) begin
+            // Drives the output according to the pixel_fifo.
+            
         end
     end
 
@@ -276,8 +284,6 @@ module PixelFetcher #(
         FetchTileDataHigh = 2, 
         Push2FIFO = 3
     } FetcherState;
-
-
 endmodule
 
 `default_nettype wire
