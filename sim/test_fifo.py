@@ -189,8 +189,11 @@ async def test_simul(dut):
     # Creates a deque of similar limit.
     FIFO: deque = deque([], DEPTH)
 
-    # Determines how many items the simultaneity test starts with.
     full_occ: bool = False
+    # 0 simul
+    
+
+    # Determines how many items the simultaneity test starts with.
     for s in range(1, DEPTH):
         # Inserts the s starting elements.
         for _ in range(s):

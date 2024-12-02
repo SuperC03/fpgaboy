@@ -47,12 +47,20 @@ module FIFO #(
             data_out <= WIDTH'(0);
             data_valid_out <= 1'b0;
         end else begin
+            // Writes necessarily take one cycle due to register updates.
             if (write) begin
                 mem[wr_ptr] <= data_in;
                 wr_ptr <= (wr_ptr >= $clog2(DEPTH)'(DEPTH -  1)) ? 
                         $clog2(DEPTH)'(0) : wr_ptr + $clog2(DEPTH)'(1);
             end
             
+            // Reads take one cycle to reduce complexity.
+            /**
+            * @note Simuls don't work unless reads are instantaneous and last 1
+            *       cycle because it cannot handle 0-element simuls and currently
+            *       the unified read and write wires prevent DEPTH-element simuls
+            *       from occuring either.
+            */
             if (read) begin
                 data_out <= mem[rd_ptr];
                 data_valid_out <= 1'b1;
@@ -62,7 +70,10 @@ module FIFO #(
                 data_valid_out <= 1'b0;
             end
 
-            // Handles the simultaneous read-write case on occupancies.
+            /**
+            * @brief    Handles the simultaneous read-write case on occupancies 
+            *           when there's something to read and somewhere to write.
+            */
             if (write && !read) begin
                 occupancy <= occupancy + ($clog2(DEPTH)+1)'(1);
             end else if (!write && read) begin
