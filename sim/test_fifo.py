@@ -199,6 +199,10 @@ async def test_simul(dut):
             dut.data_in.value = element
             FIFO.append(element)
             await ClockCycles(dut.clk_in, 1, rising=False)
+            dut.wr_en.value = 0b0
+
+        # Lets the write turn off for a cycle so it registers. 
+        await ClockCycles(dut.clk_in, 1, rising=False)
 
         # Does 4*DEPTH simuls.
         for _ in range(DEPTH * 4):
@@ -222,6 +226,16 @@ async def test_simul(dut):
 
             # Tests the stability of intermittent writes.
             await ClockCycles(dut.clk_in, rng.randint(0, DEPTH // 2), rising=False)
+        
+        # Clears the remaining s elements from the FIFO.
+        for _ in range(s):
+            dut.rd_en.value = 0b1
+            ref: int = FIFO.popleft()
+            await ClockCycles(dut.clk_in, 1, rising=False)
+            dut.rd_en.value = 0b0
+            assert (occ := dut.occupancy_out.value) == (deq := len(FIFO)), f"Expected occupancy {s}/{deq} not {occ}"
+            assert dut.data_valid_out.value == 0b1, "Expected 1-cycle reads."
+            assert (out := dut.data_out.value) == ref, f"Received {out} instead of {ref}"
 
 
 def fifo_runner():
