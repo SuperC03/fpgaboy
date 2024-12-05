@@ -261,29 +261,4 @@ module OAMScanner #(
     end
 endmodule
 
-
-module PixelFetcher #(
-    parameter X_MAX = 160
-) (
-    // Standard clock and reset signals.
-    input wire clk_in,
-    input wire rst_in,
-
-    // The T-cycle clock.
-    input wire tclk_in,
-
-    // Access to the internal X position counter.
-    input wire [$clog2(X_MAX)-1:0] X_in,
-    // Wire to tell the fetcher has completed a pixel push to LCD.
-    output wire advance_X_out    
-);
-    // Defines the 4 states that takes 2 T-cycles each.
-    typedef enum logic[1:0] {
-        FetchTileNum = 0, 
-        FetchTimeDataLow = 1, 
-        FetchTileDataHigh = 2, 
-        Push2FIFO = 3
-    } FetcherState;
-endmodule
-
 `default_nettype wire
