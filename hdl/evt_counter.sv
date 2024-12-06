@@ -7,32 +7,25 @@ module evt_counter
     input wire          evt_in,
     output logic[$clog2(MAX_COUNT)-1:0]  count_out
   );
-  logic[$clog2(MAX_COUNT)-1:0] count;
+  // Tracks what the count is so far.
+  logic [$clog2(MAX_COUNT)-1:0] count;
 
-  always_ff @(posedge clk_in) begin
-    if (rst_in) begin
-      count <= $clog2(MAX_COUNT)'('b0);
-    end else if (evt_in) begin
-      // Implements modulo logic to evt_counter.
-      if (count == $clog2(MAX_COUNT)'(MAX_COUNT - 1)) begin
-        count <= $clog2(MAX_COUNT)'('b0);
-      end else begin
-        count <= count + $clog2(MAX_COUNT)'('b1);
-      end
-    end
-  end
-
+  // Updates the count based on the event.
   always_comb begin
     if (rst_in) begin
       count_out = $clog2(MAX_COUNT)'('b0);
+    end else if (evt_in) begin
+      count_out = count == $clog2(MAX_COUNT)'(
+        $clog2(MAX_COUNT)'(MAX_COUNT - 'b1) ? 0 : count + 'b1
+      );
     end else begin
-      if (evt_in) begin
-        count_out = count == $clog2(MAX_COUNT)'(MAX_COUNT - 1) ?
-                      $clog2(MAX_COUNT)'('b0) : count + $clog2(MAX_COUNT)'('b1);
-      end else begin
-        count_out = count;
-      end
+      count_out = count;
     end
+  end
+
+  // Updates the count based on the event.
+  always_ff @(posedge clk_in) begin
+    count <= count_out;
   end
 endmodule
 
