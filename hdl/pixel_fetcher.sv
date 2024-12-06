@@ -41,13 +41,20 @@ module BackgroundFetcher #(
 
     // Wire requesting a tile row from memory.
     output logic [15:0] addr_out,
+    // Valid request to fetch data from memory.
+    output logic addr_valid_out,
+    // Data fetched from memory.
+    input wire [7:0] data_in,
+    // Whether the data fetched is valid.
+    input wire data_valid_in,
+
     // Wire to tell the fetcher has completed a pixel push to LCD.
     output logic advance_X_out    
 );
     // Defines the 4 states that takes 2 T-cycles each.
     typedef enum logic[1:0] {
         FetchTileNum = 0, 
-        FetchTimeDataLow = 1, 
+        FetchTileDataLow = 1, 
         FetchTileDataHigh = 2, 
         Push2FIFO = 3
     } FetcherState;
@@ -68,14 +75,17 @@ module BackgroundFetcher #(
     always_ff @(posedge tclk_in && stall) begin
         if (rst_in) begin
             state <= FetchTileNum;
+            addr_out <= 16'h0;
+            addr_valid_out <= 1'b0;
+            advance_X_out <= 1'b0;
         end else begin
             case (state)
                 FetchTileNum: begin
                     if (X_in == $clog2(X_MAX)'(X_MAX-1)) begin
-                        state <= FetchTimeDataLow;
+                        state <= FetchTileDataLow;
                     end
                 end
-                FetchTimeDataLow: begin
+                FetchTileDataLow: begin
                     state <= FetchTileDataHigh;
                 end
                 FetchTileDataHigh: begin
@@ -130,40 +140,67 @@ module BackgroundFetcher #(
 
     // Determines the base tile address to fetch from.
     logic [15:0] base_addr;
+    always_comb begin
+        // Determines the base address to fetch from.
+        if (background_map_in && !inside_window) begin
+            base_addr = 16'h9C00;
+        end else if (window_map_in && inside_window) begin
+            base_addr = 16'h9C00;
+        end else begin
+            base_addr = 16'h9800;
+        end
+    end
+    // Determines the offset from the base address to fetch the tile number from.
+    logic [9:0] tile_offset;
     // Fetches the tile number to request.
-    logic [9:0] tile_num;
+    logic [7:0] tile_num;
+    assign tile_offset = (SCY_in + Y_in) & 8'hFF;
     always_ff @(posedge tclk_in) begin
         if (rst_in) begin
-            base_addr <= 16'h9800;
-            tile_num <= 10'h0;
+            tile_num <= 8'h0;
         end else begin
-            // Uses the first T-cycle to determine the tile map base address.
             if (state == FetchTileNum) begin
+                // First cycle make address request.
                 if (!stall) begin
-                    if (background_map_in && !inside_window) begin
-                        base_addr <= 16'h9C00;
-                    end else if (window_map_in && inside_window) begin
-                        base_addr <= 16'h9C00;
-                    end else begin
-                        base_addr <= 16'h9800;
+                    if (tclk_in) begin
+                        addr_out <= base_addr + tile_offset;
+                        addr_valid_out <= 1'b1;
                     end
-                // Uses the second T-cycle to determine the tile number.
+                // Second cycle save the tile number.
                 end else begin
-                    tile_num <= (
-                        10'(inside_window ? window_tile_x : ((SCX_in >> 3) + fetcher_x) & 10'h1F) +
-                        (((10'(inside_window ? window_y : (Y_in + SCY_in) & 10'hFF)) >> 8) << 5)
-                    );
+                    if (data_valid_in) begin
+                        tile_num <= data_in;
+                    end
+                    addr_valid_out <= 1'b0;
                 end
             end
         end
     end
 
-    // Determines the address to request from memory.
+    // Tracks the address base of the tile.
+    logic [15:0] tile_addr;
+    always_comb begin
+        tile_addr = addressing_mode_in ? 
+            (16'h8000 + (12'(tile_num) << 4)) : 
+            (16'h9000 + (12'($signed(tile_num)) << 4));
+    end
+    // Tracks the low byte of the tile data.
+    logic [7:0] tile_data_low;
     always_ff @(posedge tclk_in) begin
         if (rst_in) begin
-            addr_out <= 16'h0;
+            tile_data_low <= 8'h0;
         end else begin
-            if (state == FetchTileNum) begin
+            if (state == FetchTileDataLow) begin
+                // First cycle make address request.
+                if (!stall) begin
+                    addr_out <= tile_addr;
+                    addr_valid_out <= 1'b1;
+                end else begin
+                    if (data_valid_in) begin
+                        tile_data_low <= data_in;
+                    end
+                    addr_valid_out <= 1'b0;
+                end
             end
         end
     end
