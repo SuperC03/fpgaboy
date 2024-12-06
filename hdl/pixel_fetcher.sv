@@ -48,8 +48,11 @@ module BackgroundFetcher #(
     // Whether the data fetched is valid.
     input wire data_valid_in,
 
-    // Wire to tell the fetcher has completed a pixel push to LCD.
-    output logic advance_X_out    
+    // Whether the background FIFO is empty.
+    input wire bg_fifo_empty_in,
+    // Pixels to push to the Background FIFO.
+    output logic valid_pixels_out,
+    output logic [1:0] pixels_out [7:0]
 );
     // Defines the 4 states that takes 2 T-cycles each.
     typedef enum logic[1:0] {
@@ -72,53 +75,45 @@ module BackgroundFetcher #(
     );
 
     // The state evolution of the fetcher.
-    always_ff @(posedge tclk_in && stall) begin
+    always_ff @(posedge tclk_in) begin
         if (rst_in) begin
             state <= FetchTileNum;
             addr_out <= 16'h0;
             addr_valid_out <= 1'b0;
-            advance_X_out <= 1'b0;
+            valid_pixels_out <= 1'b0;
         end else begin
-            case (state)
-                FetchTileNum: begin
-                    if (X_in == $clog2(X_MAX)'(X_MAX-1)) begin
+            if (stall) begin
+                case (state)
+                    FetchTileNum: begin
                         state <= FetchTileDataLow;
                     end
-                end
-                FetchTileDataLow: begin
-                    state <= FetchTileDataHigh;
-                end
-                FetchTileDataHigh: begin
-                    state <= Push2FIFO;
-                end
-                Push2FIFO: begin
+                    FetchTileDataLow: begin
+                        state <= FetchTileDataHigh;
+                    end
+                    FetchTileDataHigh: begin
+                        state <= bg_fifo_empty_in ? FetchTileNum : Push2FIFO;
+                    end
+                    Push2FIFO: begin
+                        state <= FetchTileNum;
+                    end
+                endcase
+            end else begin
+                if (state == Push2FIFO && bg_fifo_empty_in) begin
                     state <= FetchTileNum;
                 end
-            endcase
+            end
         end
     end
 
     // Tracks the X position of the fetcher within the tile.
     logic [$clog2(31)-1:0] fetcher_x;
-    logic x_progress;
     evt_counter #(
         .MAX_COUNT(32)
     ) tile_x_counter (
         .clk_in(tclk_in),
         .rst_in(rst_in),
-        .evt_in(x_progress),
+        .evt_in(valid_pixels_out),
         .count_out(fetcher_x)
-    );
-    // Tracks the Y position of the fetcher within the tile.
-    logic [$clog2(255)-1:0] fetcher_y;
-    logic y_progress;
-    evt_counter #(
-        .MAX_COUNT(256)
-    ) tile_y_counter (
-        .clk_in(tclk_in),
-        .rst_in(rst_in),
-        .evt_in(y_progress),
-        .count_out(fetcher_y)
     );
 
     // Combinational logic determining if we are inside of a window.
@@ -131,7 +126,7 @@ module BackgroundFetcher #(
     ) window_x_counter (
         .clk_in(tclk_in),
         .rst_in(rst_in),
-        .evt_in(x_progress && inside_window),
+        .evt_in(valid_pixels_out && inside_window),
         .count_out(window_tile_x)
     );
     // Tracks the window Y position.
@@ -151,10 +146,16 @@ module BackgroundFetcher #(
         end
     end
     // Determines the offset from the base address to fetch the tile number from.
+    logic [4:0] x_coord;
+    logic [7:0] y_coord;
     logic [9:0] tile_offset;
+    always_comb begin
+        x_coord = inside_window ? window_tile_x : ((SCX_in >> 3) + fetcher_x) & 5'h1F;
+        y_coord = inside_window ? window_y : ((SCY_in + Y_in) & 8'hFF);
+        tile_offset = 10'(x_coord) + (10'(y_coord >> 3) << 5);
+    end
     // Fetches the tile number to request.
     logic [7:0] tile_num;
-    assign tile_offset = (SCY_in + Y_in) & 8'hFF;
     always_ff @(posedge tclk_in) begin
         if (rst_in) begin
             tile_num <= 8'h0;
@@ -178,11 +179,13 @@ module BackgroundFetcher #(
     end
 
     // Tracks the address base of the tile.
-    logic [15:0] tile_addr;
+    logic [15:0] tile_base;
+    logic [15:0] row_base;
     always_comb begin
-        tile_addr = addressing_mode_in ? 
+        tile_base = addressing_mode_in ? 
             (16'h8000 + (12'(tile_num) << 4)) : 
             (16'h9000 + (12'($signed(tile_num)) << 4));
+        row_base = tile_base + (16'(y_coord & 3'h7) << 1);
     end
     // Tracks the low byte of the tile data.
     logic [7:0] tile_data_low;
@@ -193,7 +196,7 @@ module BackgroundFetcher #(
             if (state == FetchTileDataLow) begin
                 // First cycle make address request.
                 if (!stall) begin
-                    addr_out <= tile_addr;
+                    addr_out <= row_base;
                     addr_valid_out <= 1'b1;
                 end else begin
                     if (data_valid_in) begin
@@ -205,15 +208,43 @@ module BackgroundFetcher #(
         end
     end
 
-    // Push2FIFO state logic.
+    // Tracks the high byte of the tile data.
+    logic [7:0] tile_data_high;
     always_ff @(posedge tclk_in) begin
         if (rst_in) begin
-            advance_X_out <= 1'b0;
+            tile_data_high <= 8'h0;
         end else begin
-            if (state == Push2FIFO && !stall) begin
-                advance_X_out <= 1'b1;
-            end else begin
-                advance_X_out <= 1'b0;
+            if (state == FetchTileDataHigh) begin
+                // First cycle make address request.
+                if (!stall) begin
+                    addr_out <= row_base + 16'b1;
+                    addr_valid_out <= 1'b1;
+                end else begin
+                    if (data_valid_in) begin
+                        tile_data_high <= data_in;
+                        // Mixes the low and high bytes to form the pixel output.
+                        if (bg_fifo_empty_in) begin
+                            valid_pixels_out <= 1'b1;
+                            for (int i = 0; i < 8; i++) begin
+                                pixels_out[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
+                            end
+                        end
+                    end
+                    addr_valid_out <= 1'b0;
+                end
+            end
+        end
+    end
+
+    // Push2FIFO state logic.
+    always_ff @(posedge tclk_in) begin
+        if (state == Push2FIFO) begin
+            // Mixes the low and high bytes to form the pixel output.
+            if (bg_fifo_empty_in) begin
+                valid_pixels_out <= 1'b1;
+                for (int i = 0; i < 8; i++) begin
+                    pixels_out[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
+                end
             end
         end
     end
