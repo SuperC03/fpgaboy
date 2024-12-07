@@ -65,18 +65,42 @@ module BackgroundFetcher #(
     // Determines whether or not we are waiting a T-cycle to advance the state.
     logic stall;
 
+    // Internal buffers for the fetcher for output values to hold.
+    logic [15:0] addr;
+    logic addr_valid;
+    logic [1:0] pixels [7:0];
+    logic valid_pixels;
+    // Holds all values to 0 on reset combinationally.
+    always_comb begin
+        if (rst_in) begin
+            addr_out = 16'h0;
+            addr_valid_out = 1'b0;
+            valid_pixels_out = 1'b0;
+            for (int i = 0; i < 8; i++) begin
+                pixels_out[i] = 2'h0;
+            end
+        end else begin
+            addr_out = addr;
+            addr_valid_out = addr_valid;
+            valid_pixels_out = valid_pixels;
+            for (int i = 0; i < 8; i++) begin
+                pixels_out[i] = pixels[i];
+            end
+        end
+    end
+
     // The state evolution of the fetcher.
-    always_ff @(posedge tclk_in) begin
+    always_ff @(posedge clk_in) begin
         if (rst_in) begin
             state <= FetchTileNum;
             stall <= 1'b0;
-            addr_out <= 16'h0;
-            addr_valid_out <= 1'b0;
-            valid_pixels_out <= 1'b0;
+            addr <= 16'h0;
+            addr_valid <= 1'b0;
+            valid_pixels <= 1'b0;
             for (int i = 0; i < 8; i++) begin
-                pixels_out[i] <= 2'h0;
+                pixels[i] <= 2'h0;
             end
-        end else begin
+        end else if (tclk_in) begin
             if (stall) begin
                 case (state)
                     FetchTileNum: begin
@@ -163,14 +187,14 @@ module BackgroundFetcher #(
                 // First cycle make address request.
                 if (!stall) begin
                     // Address request for the tile number.
-                    addr_out <= base_addr + tile_offset;
-                    addr_valid_out <= 1'b1;
+                    addr <= base_addr + tile_offset;
+                    addr_valid <= 1'b1;
                     // Resets pixel_valid_out as it just sent the last row.
-                    valid_pixels_out <= 1'b0;
+                    valid_pixels <= 1'b0;
                 // Second cycle save the tile number.
                 end else begin
                     tile_num <= data;
-                    addr_valid_out <= 1'b0;
+                    addr_valid <= 1'b0;
                 end
             end
         end
@@ -194,11 +218,11 @@ module BackgroundFetcher #(
             if (tclk_in && state == FetchTileDataLow) begin
                 // First cycle make address request.
                 if (!stall) begin
-                    addr_out <= row_base;
-                    addr_valid_out <= 1'b1;
+                    addr <= row_base;
+                    addr_valid <= 1'b1;
                 end else begin
                     tile_data_low <= data;
-                    addr_valid_out <= 1'b0;
+                    addr_valid <= 1'b0;
                 end
             end
         end
@@ -213,18 +237,18 @@ module BackgroundFetcher #(
             if (tclk_in && state == FetchTileDataHigh) begin
                 // First cycle make address request.
                 if (!stall) begin
-                    addr_out <= row_base + 16'b1;
-                    addr_valid_out <= 1'b1;
+                    addr <= row_base + 16'b1;
+                    addr_valid <= 1'b1;
                 end else begin
                     tile_data_high <= data;
                     // Mixes the low and high bytes to form the pixel output.
-                    valid_pixels_out <= bg_fifo_empty_in;
+                    valid_pixels <= bg_fifo_empty_in;
                     for (int i = 0; i < 8; i++) begin
-                        pixels_out[i] <= {
+                        pixels[i] <= {
                             data[7-i], tile_data_low[7-i]
                         };
                     end
-                    addr_valid_out <= 1'b0;
+                    addr_valid <= 1'b0;
                 end
             end
         end
@@ -234,9 +258,9 @@ module BackgroundFetcher #(
     always_ff @(posedge clk_in) begin
         if (tclk_in && state == Push2FIFO) begin
             // Mixes the low and high bytes to form the pixel output.
-            valid_pixels_out <= bg_fifo_empty_in;
+            valid_pixels <= bg_fifo_empty_in;
             for (int i = 0; i < 8; i++) begin
-                pixels_out[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
+                pixels[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
             end
         end
     end

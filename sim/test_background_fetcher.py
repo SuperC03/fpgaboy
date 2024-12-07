@@ -3,7 +3,6 @@ import random
 import struct
 import sys
 
-from collections import deque
 from pathlib import Path
 from pprint import pprint, pformat
 
@@ -21,7 +20,6 @@ async def reset(dut):
     dut.rst_in.value = 0b1;
     await ClockCycles(dut.clk_in, 2, rising=False)
     dut.rst_in.value = 0b0;
-    await ClockCycles(dut.clk_in, 1, rising=False)
 
 async def set_inputs(
     dut,
@@ -115,7 +113,6 @@ async def test_nonpush_timing(dut):
     Tests the timings for expected values with all 0 inputs, an empty bg_fifo, and 
     valid data in being all 0s."""
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
-    await cocotb.start(tclk_tick(dut))
 
     await reset(dut)
     await set_inputs(
@@ -127,36 +124,37 @@ async def test_nonpush_timing(dut):
         0, 0b1,
         0b1
     )
+    await cocotb.start(tclk_tick(dut))
     check_outputs(dut, 0, False, 0, False)
 
     # Tests the fact it outputs an addr 2 tclk if it can write to buffer.
     for x in range(4):
         # Fetch tile # T1.
+        await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        # check_outputs(dut, 0x9800 + x, True, None, False)
-        await FallingEdge(dut.tclk_in)
+        check_outputs(dut, 0x9800 + x, True, None, False)
         # Fetch tile # T2.
+        await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        # check_outputs(dut, None, False, None, False)
-        await FallingEdge(dut.tclk_in)
+        check_outputs(dut, None, False, None, False)
 
         # Fetch Tile Data Low T1.
+        await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        # check_outputs(dut, 0x9000, True, None, False)
-        await FallingEdge(dut.clk_in)
+        check_outputs(dut, 0x9000, True, None, False)
         # Fetch Tile Data Low T2.
+        await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        # check_outputs(dut, None, False, None, False)
-        await FallingEdge(dut.tclk_in)
+        check_outputs(dut, None, False, None, False)
 
         # Fetch Tile Data High T1.
+        await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        # check_outputs(dut, 0x9001, True, None, False)
-        await FallingEdge(dut.tclk_in)
+        check_outputs(dut, 0x9001, True, None, False)
         # Fetch Tile Data High T2.
+        await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        # check_outputs(dut, None, False, (0,) * 8, True)
-        await FallingEdge(dut.tclk_in)
+        check_outputs(dut, None, False, (0,) * 8, True)
 
 
 def background_fetcher_runner():
