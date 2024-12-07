@@ -103,7 +103,7 @@ module BackgroundFetcher #(
 
     // Tracks the X position of the fetcher within the tile.
     logic [$clog2(31)-1:0] fetcher_x;
-    evt_counter #(
+    EvtCounter #(
         .MAX_COUNT(32)
     ) tile_x_counter (
         .clk_in(clk_in),
@@ -117,7 +117,7 @@ module BackgroundFetcher #(
     assign inside_window = (X_in + 7) >= WX_in && window_ena_in && WY_cond_in;
     // Tracks the window tile X position.
     logic [$clog2(31)-1:0] window_tile_x;
-    evt_counter #(
+    EvtCounter #(
         .MAX_COUNT(32)
     ) window_x_counter (
         .clk_in(clk_in),
@@ -162,8 +162,11 @@ module BackgroundFetcher #(
             if (tclk_in && state == FetchTileNum) begin
                 // First cycle make address request.
                 if (!stall) begin
+                    // Address request for the tile number.
                     addr_out <= base_addr + tile_offset;
                     addr_valid_out <= 1'b1;
+                    // Resets pixel_valid_out as it just sent the last row.
+                    valid_pixels_out <= 1'b0;
                 // Second cycle save the tile number.
                 end else begin
                     tile_num <= data;

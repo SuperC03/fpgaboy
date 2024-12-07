@@ -17,12 +17,11 @@ X_MAX: int = 160
 TOTAL_SCANLINES: int = 8
 
 async def reset(dut):
-    """Resets the FIFO."""
+    """Resets the background fetcher."""
     dut.rst_in.value = 0b1;
     await ClockCycles(dut.clk_in, 2, rising=False)
     dut.rst_in.value = 0b0;
-    await ClockCycles(dut.clk_in, 2, rising=False)
-
+    await ClockCycles(dut.clk_in, 1, rising=False)
 
 async def set_inputs(
     dut,
@@ -107,7 +106,6 @@ async def test_reset(dut):
     await cocotb.start(tclk_tick(dut))
 
     await setup(dut)
-    await FallingEdge(dut.clk_in)
     check_outputs(dut, 0, False, 0, False)
 
 
@@ -129,7 +127,6 @@ async def test_nonpush_timing(dut):
         0, 0b1,
         0b1
     )
-    await FallingEdge(dut.tclk_in)
     check_outputs(dut, 0, False, 0, False)
 
     # Tests the fact it outputs an addr 2 tclk if it can write to buffer.
