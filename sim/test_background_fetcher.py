@@ -8,7 +8,7 @@ from pprint import pprint, pformat
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import Timer, ClockCycles, RisingEdge, FallingEdge, ReadOnly
+from cocotb.triggers import Timer, ClockCycles, RisingEdge, FallingEdge, with_timeout
 from cocotb.utils import get_sim_time as gst
 from cocotb.runner import get_runner
 
@@ -17,8 +17,9 @@ TOTAL_SCANLINES: int = 8
 
 async def reset(dut):
     """Resets the background fetcher."""
+    await with_timeout(FallingEdge(dut.clk_in), 200, 'ns')
     dut.rst_in.value = 0b1;
-    await ClockCycles(dut.clk_in, 2, rising=False)
+    await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 200, 'ns')
     dut.rst_in.value = 0b0;
 
 
@@ -50,7 +51,7 @@ async def set_inputs(
 
     dut.bg_fifo_empty_in.value = bg_fifo_empty
 
-
+@cocotb.coroutine
 async def tclk_tick(dut):
     """Blips the tclk signal once per 250ns."""
     await FallingEdge(dut.clk_in)
@@ -99,10 +100,10 @@ def check_outputs(
         )
 
 
-def make_row(lo: int, hi: int) -> tuple[int]:
+def make_row(lo: int, hi: int) -> int:
     """Mixes the bytes of a row into a tuple of pixels."""
     for i in range(8):
-        yield ((hi >> i) & 0b1 << 1) | ((lo >> i) & 0b1)
+        yield (((hi >> i) & 0x1) << 1) | ((lo >> i) & 0x1)
   
 @cocotb.test()
 async def test_reset(dut):
@@ -120,6 +121,7 @@ async def test_nonpush_timing(dut):
     and valid data in being all 0s.
     """
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
+    await cocotb.start(tclk_tick(dut))
 
     await reset(dut)
     await set_inputs(
@@ -131,7 +133,6 @@ async def test_nonpush_timing(dut):
         0, 0b1,
         0b1
     )
-    await cocotb.start(tclk_tick(dut))
     check_outputs(dut, 0, False, 0, False)
 
     # Tests the fact it outputs an addr 2 tclk if it can write to buffer.
@@ -170,6 +171,9 @@ async def test_no_valid_data(dut):
     Tests the timings for expected values with all 0 inputs, an empty bg_fifo,
     and no valid data in.
     """
+    cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
+    await cocotb.start(tclk_tick(dut))
+    
     await reset(dut)
     await set_inputs(
         dut,
@@ -180,37 +184,36 @@ async def test_no_valid_data(dut):
         0, 0b0,
         0b1
     )
-    await cocotb.start(tclk_tick(dut))
     check_outputs(dut, 0, False, 0, False)
 
     # Tests the fact it interprets no data as 0xFF.
     for x in range(X_MAX):
         # Fetch tile # T1.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, 0x9800 + 0xFF + (x % 32), True, None, False)
+        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
+        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
+        check_outputs(dut, 0x9800 + (x % 32), True, None, False)
         # Fetch tile # T2.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
+        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
         check_outputs(dut, None, False, None, False)
 
         # Fetch Tile Data Low T1.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, 0x9000 + 0xFF * 16, True, None, False)
+        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
+        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
+        check_outputs(dut, 0x9000 - 1 * 16, True, None, False)
         # Fetch Tile Data Low T2.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
+        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
         check_outputs(dut, None, False, None, False)
 
         # Fetch Tile Data High T1.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, 0x9001 + 0xFF * 16, True, None, False)
+        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
+        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
+        check_outputs(dut, 0x9001 - 1 * 16, True, None, False)
         # Fetch Tile Data High T2.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, None, False, (0xFF,) * 8, True)
+        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
+        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
+        check_outputs(dut, None, False, (0x3,) * 8, True)
 
 
 @cocotb.test()
@@ -219,6 +222,8 @@ async def test_no_bg_fifo(dut):
     Tests the timings for expected values with all 0 inputs, an empty bg_fifo,
     and valid data in being all 0s.
     """
+    cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
+    await cocotb.start(tclk_tick(dut))
     await reset(dut)
     await set_inputs(
         dut,
@@ -229,7 +234,6 @@ async def test_no_bg_fifo(dut):
         0, 0b1,
         0b0
     )
-    await cocotb.start(tclk_tick(dut))
     check_outputs(dut, 0, False, 0, False)
 
     # Tests the fact it outputs an addr 2 tclk if it can write to buffer.
