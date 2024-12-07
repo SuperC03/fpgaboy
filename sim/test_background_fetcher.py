@@ -21,6 +21,7 @@ async def reset(dut):
     await ClockCycles(dut.clk_in, 2, rising=False)
     dut.rst_in.value = 0b0;
 
+
 async def set_inputs(
     dut,
     X: int, Y: int,
@@ -61,7 +62,7 @@ async def tclk_tick(dut):
 
 
 async def setup(dut):
-    """Sets up the FIFO."""
+    """Sets up the BackgroundFetcher."""
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
 
     await reset(dut)
@@ -81,7 +82,7 @@ def check_outputs(
         addr_out: int, addr_valid_out: bool, 
         pixels_out: tuple[int], valid_pixels_out: bool 
 ):
-    """Checks the FIFO outputs."""
+    """Checks the BackgroundFetcher outputs."""
     assert dut.addr_valid_out.value == addr_valid_out, (
         f"Expected {bin(addr_valid_out)}, got {dut.addr_valid_out.value}"
     )
@@ -96,7 +97,13 @@ def check_outputs(
         assert tuple(dut.pixels_out.value) == pixels_out, (
             f"Expected {[bin(pixel) for pixel in pixels_out]}, got {dut.pixels_out.value}"
         )
-    
+
+
+def make_row(lo: int, hi: int) -> tuple[int]:
+    """Mixes the bytes of a row into a tuple of pixels."""
+    for i in range(8):
+        yield ((hi >> i) & 0b1 << 1) | ((lo >> i) & 0b1)
+  
 @cocotb.test()
 async def test_reset(dut):
     """Tests the background fetcher reset."""
@@ -159,6 +166,10 @@ async def test_nonpush_timing(dut):
 
 @cocotb.test()
 async def test_no_valid_data(dut):
+    """
+    Tests the timings for expected values with all 0 inputs, an empty bg_fifo,
+    and no valid data in.
+    """
     await reset(dut)
     await set_inputs(
         dut,
@@ -200,6 +211,74 @@ async def test_no_valid_data(dut):
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
         check_outputs(dut, None, False, (0xFF,) * 8, True)
+
+
+@cocotb.test()
+async def test_no_bg_fifo(dut):
+    """
+    Tests the timings for expected values with all 0 inputs, an empty bg_fifo,
+    and valid data in being all 0s.
+    """
+    await reset(dut)
+    await set_inputs(
+        dut,
+        0, 0,
+        0, 0, 0b0,
+        0, 0, 0, 0b0, 0b0,
+        0b0,
+        0, 0b1,
+        0b0
+    )
+    await cocotb.start(tclk_tick(dut))
+    check_outputs(dut, 0, False, 0, False)
+
+    # Tests the fact it outputs an addr 2 tclk if it can write to buffer.
+    for x in range(X_MAX):
+        # Cleans the slate on inputs for the next iteration.
+        await set_inputs(
+            dut,
+            0, 0,
+            0, 0, 0b0,
+            0, 0, 0, 0b0, 0b0,
+            0b0,
+            0, 0b1,
+            0b0
+        )
+
+        # Fetch tile # T1.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        check_outputs(dut, 0x9800 + (x % 32), True, None, False)
+        # Fetch tile # T2.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        check_outputs(dut, None, False, None, False)
+
+        # Fetch Tile Data Low T1.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        check_outputs(dut, 0x9000, True, None, False)
+        # Some random input data to test the waiting is stable.
+        tile_low: int = random.randbits(8)
+        dut.data_in.value = tile_low
+        # Fetch Tile Data Low T2.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        check_outputs(dut, None, False, None, False)
+
+        # Fetch Tile Data High T1.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        check_outputs(dut, 0x9001, True, None, False)
+        # Some random input data to test the waiting is stable.
+        tile_high: int = random.randbits(8)
+        dut.data_in.value = tile_high
+        # Fetch Tile Data High T2.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        # Creates the ground truth for the pixels.
+        pixels: tuple[int] = tuple(make_row(tile_low, tile_high))
+        check_outputs(dut, None, False, pixels, True)
 
 
 def background_fetcher_runner():
