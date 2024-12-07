@@ -106,9 +106,9 @@ module BackgroundFetcher #(
     evt_counter #(
         .MAX_COUNT(32)
     ) tile_x_counter (
-        .clk_in(tclk_in),
+        .clk_in(clk_in),
         .rst_in(rst_in),
-        .evt_in(valid_pixels_out),
+        .evt_in(tclk_in && valid_pixels_out),
         .count_out(fetcher_x)
     );
 
@@ -120,9 +120,9 @@ module BackgroundFetcher #(
     evt_counter #(
         .MAX_COUNT(32)
     ) window_x_counter (
-        .clk_in(tclk_in),
+        .clk_in(clk_in),
         .rst_in(rst_in),
-        .evt_in(valid_pixels_out && inside_window),
+        .evt_in(tclk_in && valid_pixels_out && inside_window),
         .count_out(window_tile_x)
     );
     // Tracks the window Y position.
@@ -155,11 +155,11 @@ module BackgroundFetcher #(
     end
     // Fetches the tile number to request.
     logic [7:0] tile_num;
-    always_ff @(posedge tclk_in) begin
+    always_ff @(posedge clk_in) begin
         if (rst_in) begin
             tile_num <= 8'h0;
         end else begin
-            if (state == FetchTileNum) begin
+            if (tclk_in && state == FetchTileNum) begin
                 // First cycle make address request.
                 if (!stall) begin
                     addr_out <= base_addr + tile_offset;
@@ -184,11 +184,11 @@ module BackgroundFetcher #(
     end
     // Tracks the low byte of the tile data.
     logic [7:0] tile_data_low;
-    always_ff @(posedge tclk_in) begin
+    always_ff @(posedge clk_in) begin
         if (rst_in) begin
             tile_data_low <= 8'h0;
         end else begin
-            if (state == FetchTileDataLow) begin
+            if (tclk_in && state == FetchTileDataLow) begin
                 // First cycle make address request.
                 if (!stall) begin
                     addr_out <= row_base;
@@ -203,11 +203,11 @@ module BackgroundFetcher #(
 
     // Tracks the high byte of the tile data.
     logic [7:0] tile_data_high;
-    always_ff @(posedge tclk_in) begin
+    always_ff @(posedge clk_in) begin
         if (rst_in) begin
             tile_data_high <= 8'h0;
         end else begin
-            if (state == FetchTileDataHigh) begin
+            if (tclk_in && state == FetchTileDataHigh) begin
                 // First cycle make address request.
                 if (!stall) begin
                     addr_out <= row_base + 16'b1;
@@ -228,8 +228,8 @@ module BackgroundFetcher #(
     end
 
     // Push2FIFO state logic.
-    always_ff @(posedge tclk_in) begin
-        if (state == Push2FIFO) begin
+    always_ff @(posedge clk_in) begin
+        if (tclk_in && state == Push2FIFO) begin
             // Mixes the low and high bytes to form the pixel output.
             valid_pixels_out <= bg_fifo_empty_in;
             for (int i = 0; i < 8; i++) begin

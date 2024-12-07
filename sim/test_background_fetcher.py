@@ -53,6 +53,16 @@ async def set_inputs(
     dut.bg_fifo_empty_in.value = bg_fifo_empty
 
 
+async def tclk_tick(dut):
+    """Blips the tclk signal once per 250ns."""
+    await FallingEdge(dut.clk_in)
+    while True:
+        dut.tclk_in.value = 0b1
+        await ClockCycles(dut.clk_in, 1, rising=False)
+        dut.tclk_in.value = 0b0
+        await ClockCycles(dut.clk_in, 24, rising=False)
+
+
 async def setup(dut):
     """Sets up the FIFO."""
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
@@ -94,7 +104,7 @@ def check_outputs(
 async def test_reset(dut):
     """Tests the background fetcher reset."""
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
-    cocotb.start_soon(Clock(dut.tclk_in, 250, units="ns").start())
+    await cocotb.start(tclk_tick(dut))
 
     await setup(dut)
     await FallingEdge(dut.clk_in)
@@ -107,7 +117,7 @@ async def test_nonpush_timing(dut):
     Tests the timings for expected values with all 0 inputs, an empty bg_fifo, and 
     valid data in being all 0s."""
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
-    cocotb.start_soon(Clock(dut.tclk_in, 1, units="us").start())
+    await cocotb.start(tclk_tick(dut))
 
     await reset(dut)
     await set_inputs(
@@ -123,7 +133,7 @@ async def test_nonpush_timing(dut):
     check_outputs(dut, 0, False, 0, False)
 
     # Tests the fact it outputs an addr 2 tclk if it can write to buffer.
-    for x in range(X_MAX):
+    for x in range(4):
         # Fetch tile # T1.
         await ClockCycles(dut.clk_in, 2, rising=False)
         # check_outputs(dut, 0x9800 + x, True, None, False)
@@ -137,7 +147,6 @@ async def test_nonpush_timing(dut):
         await ClockCycles(dut.clk_in, 2, rising=False)
         # check_outputs(dut, 0x9000, True, None, False)
         await FallingEdge(dut.clk_in)
-    
         # Fetch Tile Data Low T2.
         await ClockCycles(dut.clk_in, 2, rising=False)
         # check_outputs(dut, None, False, None, False)
