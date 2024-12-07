@@ -26,32 +26,53 @@ async def setup(dut):
 
 
 @cocotb.test()
-async def test_a(dut):
-    """cocotb test?"""
-    dut._log.info("Starting...")
+async def test_nominal(dut):
+    """Tests that the nominal count is correct."""
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
     await setup(dut)
     assert dut.count_out.value.integer == 0, "Reset not setting count_out to 0 :/"
+
+    for i in range(1, 2*MAX_COUNT+1):
+        dut.evt_in.value = 0b1
+        await ClockCycles(dut.clk_in, 1, rising=False)
+        assert dut.count_out.value.integer == i % MAX_COUNT, (
+            f"count_out not incrementing correctly on evt: {dut.count_out.value.integer} != {i}"
+        )
+
+        dut.evt_in.value = 0b0
+        await ClockCycles(dut.clk_in, 1, rising=False)
+        assert dut.count_out.value.integer == i % MAX_COUNT, (
+            f"count_out incrementing on !evt: {dut.count_out.value.integer} != {i} "
+        )
+
+
+@cocotb.test()
+async def test_bucking(dut):
+    """Tests the stability of the counter."""
+    cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
+    await setup(dut)
+    assert dut.count_out.value.integer == 0, "Reset not setting count_out to 0 :/"
+    await FallingEdge(dut.clk_in)
     
-    for i in range(1, 2*MAX_COUNT + 1):
+    for i in range(1, 2*MAX_COUNT+1):
         dut.evt_in.value = 0b1
         await RisingEdge(dut.clk_in)
-        assert dut.count_out.value.integer == i % MAX_COUNT, (
-            f"count_out not incrementing on evt: {i} != {dut.count_out.value.integer}"
+        assert dut.count_out.value.integer == (i-1) % MAX_COUNT, (
+            f"count_out not incrementing on evt: {dut.count_out.value.integer} != {i}"
         )
         await FallingEdge(dut.clk_in)
         assert dut.count_out.value.integer == i % MAX_COUNT, (
-            f"count_out not sticking on evt: {i} != {dut.count_out.value.integer}"
+            f"count_out not sticking on evt: {dut.count_out.value.integer} != {i}"
         )
 
         dut.evt_in.value = 0b0
         await RisingEdge(dut.clk_in)
         assert dut.count_out.value.integer == i % MAX_COUNT, (
-            f"count_out incrementing on !evt: {i} != {dut.count_out.value.integer}"
+            f"count_out incrementing on !evt: {dut.count_out.value.integer} != {i}"
         )
         await FallingEdge(dut.clk_in)
         assert dut.count_out.value.integer == i % MAX_COUNT, (
-            f"count_out not sticking on !evt: {i} != {dut.count_out.value.integer}"
+            f"count_out not sticking on !evt: {dut.count_out.value.integer} != {i}"
         )
 
 

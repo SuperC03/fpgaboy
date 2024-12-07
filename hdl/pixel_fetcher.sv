@@ -125,6 +125,11 @@ module BackgroundFetcher #(
         end
     end
 
+    // Whether or not to advance X position.
+    logic advance_x;
+    assign advance_x = tclk_in && bg_fifo_empty_in && (
+        state == Push2FIFO || (state == FetchTileDataHigh && stall)
+    );
     // Tracks the X position of the fetcher within the tile.
     logic [$clog2(31)-1:0] fetcher_x;
     EvtCounter #(
@@ -132,7 +137,7 @@ module BackgroundFetcher #(
     ) tile_x_counter (
         .clk_in(clk_in),
         .rst_in(rst_in),
-        .evt_in(tclk_in && valid_pixels_out),
+        .evt_in(advance_x),
         .count_out(fetcher_x)
     );
 
@@ -146,7 +151,7 @@ module BackgroundFetcher #(
     ) window_x_counter (
         .clk_in(clk_in),
         .rst_in(rst_in),
-        .evt_in(tclk_in && valid_pixels_out && inside_window),
+        .evt_in(advance_x && inside_window),
         .count_out(window_tile_x)
     );
     // Tracks the window Y position.
