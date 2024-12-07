@@ -2,6 +2,9 @@
 _history/
 obj/
 
+# Test files
+sim_build/
+
 # MacOS files.
 .DS_Store
 

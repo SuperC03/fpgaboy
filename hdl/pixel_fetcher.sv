@@ -64,23 +64,18 @@ module BackgroundFetcher #(
     FetcherState state;
     // Determines whether or not we are waiting a T-cycle to advance the state.
     logic stall;
-    // Counts the number of elapsed T-cycles.
-    evt_counter #(
-        .MAX_COUNT(2)
-    ) evt_counter (
-        .clk_in(tclk_in),
-        .rst_in(rst_in),
-        .evt_in(tclk_in),
-        .count_out(stall)
-    );
 
     // The state evolution of the fetcher.
     always_ff @(posedge tclk_in) begin
         if (rst_in) begin
             state <= FetchTileNum;
+            stall <= 1'b0;
             addr_out <= 16'h0;
             addr_valid_out <= 1'b0;
             valid_pixels_out <= 1'b0;
+            for (int i = 0; i < 8; i++) begin
+                pixels_out[i] <= 2'h0;
+            end
         end else begin
             if (stall) begin
                 case (state)
@@ -102,6 +97,7 @@ module BackgroundFetcher #(
                     state <= FetchTileNum;
                 end
             end
+            stall <= ~stall;
         end
     end
 
@@ -132,6 +128,9 @@ module BackgroundFetcher #(
     // Tracks the window Y position.
     logic [$clog2(255) - 1:0] window_y;
     assign window_y = (WY_in - Y_in) & 8'hFF;
+    // Invalid data entries are interpreted as 0xFF.
+    logic [7:0] data;
+    assign data = data_valid_in ? data_in : 8'hFF;
 
     // Determines the base tile address to fetch from.
     logic [15:0] base_addr;
@@ -163,15 +162,11 @@ module BackgroundFetcher #(
             if (state == FetchTileNum) begin
                 // First cycle make address request.
                 if (!stall) begin
-                    if (tclk_in) begin
-                        addr_out <= base_addr + tile_offset;
-                        addr_valid_out <= 1'b1;
-                    end
+                    addr_out <= base_addr + tile_offset;
+                    addr_valid_out <= 1'b1;
                 // Second cycle save the tile number.
                 end else begin
-                    if (data_valid_in) begin
-                        tile_num <= data_in;
-                    end
+                    tile_num <= data;
                     addr_valid_out <= 1'b0;
                 end
             end
@@ -199,9 +194,7 @@ module BackgroundFetcher #(
                     addr_out <= row_base;
                     addr_valid_out <= 1'b1;
                 end else begin
-                    if (data_valid_in) begin
-                        tile_data_low <= data_in;
-                    end
+                    tile_data_low <= data;
                     addr_valid_out <= 1'b0;
                 end
             end
@@ -220,15 +213,13 @@ module BackgroundFetcher #(
                     addr_out <= row_base + 16'b1;
                     addr_valid_out <= 1'b1;
                 end else begin
-                    if (data_valid_in) begin
-                        tile_data_high <= data_in;
-                        // Mixes the low and high bytes to form the pixel output.
-                        if (bg_fifo_empty_in) begin
-                            valid_pixels_out <= 1'b1;
-                            for (int i = 0; i < 8; i++) begin
-                                pixels_out[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
-                            end
-                        end
+                    tile_data_high <= data;
+                    // Mixes the low and high bytes to form the pixel output.
+                    valid_pixels_out <= bg_fifo_empty_in;
+                    for (int i = 0; i < 8; i++) begin
+                        pixels_out[i] <= {
+                            data[7-i], tile_data_low[7-i]
+                        };
                     end
                     addr_valid_out <= 1'b0;
                 end
@@ -240,11 +231,9 @@ module BackgroundFetcher #(
     always_ff @(posedge tclk_in) begin
         if (state == Push2FIFO) begin
             // Mixes the low and high bytes to form the pixel output.
-            if (bg_fifo_empty_in) begin
-                valid_pixels_out <= 1'b1;
-                for (int i = 0; i < 8; i++) begin
-                    pixels_out[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
-                end
+            valid_pixels_out <= bg_fifo_empty_in;
+            for (int i = 0; i < 8; i++) begin
+                pixels_out[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
             end
         end
     end
