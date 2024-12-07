@@ -132,7 +132,7 @@ async def test_nonpush_timing(dut):
         # Fetch tile # T1.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, 0x9800 + x, True, None, False)
+        check_outputs(dut, 0x9800 + (x % 32), True, None, False)
         # Fetch tile # T2.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
