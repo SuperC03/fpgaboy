@@ -35,15 +35,18 @@ async def test_a(dut):
     
     for i in range(1, 2*MAX_COUNT + 1):
         dut.evt_in.value = 0b1
-        await ClockCycles(dut.clk_in, 1, rising=False)
+        await RisingEdge(dut.clk_in)
         assert dut.count_out.value.integer == i % MAX_COUNT, (
             f"count_out not incrementing on evt: {i} != {dut.count_out.value.integer}"
         )
-        dut.evt_in.value = 0b0
         await ClockCycles(dut.clk_in, 1, rising=False)
+
+        dut.evt_in.value = 0b0
+        await RisingEdge(dut.clk_in)
         assert dut.count_out.value.integer == i % MAX_COUNT, (
             f"count_out incrementing on !evt: {i} != {dut.count_out.value.integer}"
         )
+        await ClockCycles(dut.clk_in, 1, rising=False)
 
 
 def evt_counter_runner():

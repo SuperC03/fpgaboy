@@ -7,20 +7,25 @@ module EvtCounter
     input wire          evt_in,
     output logic[$clog2(MAX_COUNT):0]  count_out
   );
- 
+  
+  // Tracks the number of evt_in detected.
+  logic [$clog2(MAX_COUNT):0] count;
   always_ff @(posedge clk_in) begin
-    // Reset the counter.
+    count <= count_out;
+  end
+
+  // Logic to determine the next count value.
+  always_comb begin
     if (rst_in) begin
-      count_out <= $clog2(MAX_COUNT)'('b0);
-    // Increment the counter if an event is detected.
+      count_out = $clog2(MAX_COUNT)'('h0);
     end else if (evt_in) begin
-      // Implements modulo logic to evt_counter.
       if (count_out == (MAX_COUNT - 1)) begin
-        count_out <= $clog2(MAX_COUNT)'('b0);
-      // Increment the counter regularly.
+        count_out = $clog2(MAX_COUNT)'('h0);
       end else begin
-        count_out <= count_out + 1;
+        count_out = count + $clog2(MAX_COUNT)'('h1);
       end
+    end else begin
+      count_out = count;
     end
   end
 endmodule
