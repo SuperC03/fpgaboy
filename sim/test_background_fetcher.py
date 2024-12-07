@@ -234,6 +234,7 @@ async def test_no_bg_fifo(dut):
         0, 0b1,
         0b0
     )
+    rng: random.Random = random.Random(42)
     check_outputs(dut, 0, False, 0, False)
 
     # Tests the fact it outputs an addr 2 tclk if it can write to buffer.
@@ -263,7 +264,7 @@ async def test_no_bg_fifo(dut):
         await ClockCycles(dut.clk_in, 2, rising=False)
         check_outputs(dut, 0x9000, True, None, False)
         # Some random input data to test the waiting is stable.
-        tile_low: int = random.randbits(8)
+        tile_low: int = rng.getrandbits(8)
         dut.data_in.value = tile_low
         # Fetch Tile Data Low T2.
         await RisingEdge(dut.tclk_in)
@@ -275,13 +276,23 @@ async def test_no_bg_fifo(dut):
         await ClockCycles(dut.clk_in, 2, rising=False)
         check_outputs(dut, 0x9001, True, None, False)
         # Some random input data to test the waiting is stable.
-        tile_high: int = random.randbits(8)
+        tile_high: int = rng.getrandbits(8)
         dut.data_in.value = tile_high
         # Fetch Tile Data High T2.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
         # Creates the ground truth for the pixels.
         pixels: tuple[int] = tuple(make_row(tile_low, tile_high))
+        check_outputs(dut, None, False, None, False)
+        for _ in range(rng.randint(0, 8)):
+            await RisingEdge(dut.tclk_in)
+            await ClockCycles(dut.clk_in, 2, rising=False)
+            check_outputs(dut, None, False, None, False)
+        else:
+            await FallingEdge(dut.clk_in)
+            dut.bg_fifo_empty_in.value = 0b1
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
         check_outputs(dut, None, False, pixels, True)
 
 

@@ -101,27 +101,26 @@ module BackgroundFetcher #(
                 pixels[i] <= 2'h0;
             end
         end else if (tclk_in) begin
-            if (stall) begin
-                case (state)
-                    FetchTileNum: begin
-                        state <= FetchTileDataLow;
-                    end
-                    FetchTileDataLow: begin
-                        state <= FetchTileDataHigh;
-                    end
-                    FetchTileDataHigh: begin
-                        state <= bg_fifo_empty_in ? FetchTileNum : Push2FIFO;
-                    end
-                    Push2FIFO: begin
-                        state <= FetchTileNum;
-                    end
-                endcase
+
+            if (state == Push2FIFO && bg_fifo_empty_in) begin
+                state <= FetchTileNum;
+                stall <= 1'b0;
             end else begin
-                if (state == Push2FIFO && bg_fifo_empty_in) begin
-                    state <= FetchTileNum;
+                if (stall) begin
+                    case (state)
+                        FetchTileNum: begin
+                            state <= FetchTileDataLow;
+                        end
+                        FetchTileDataLow: begin
+                            state <= FetchTileDataHigh;
+                        end
+                        FetchTileDataHigh: begin
+                            state <= bg_fifo_empty_in ? FetchTileNum : Push2FIFO;
+                        end
+                    endcase
                 end
+                stall <= ~stall;
             end
-            stall <= ~stall;
         end
     end
 
