@@ -128,7 +128,7 @@ async def test_nonpush_timing(dut):
     check_outputs(dut, 0, False, 0, False)
 
     # Tests the fact it outputs an addr 2 tclk if it can write to buffer.
-    for x in range(4):
+    for x in range(X_MAX):
         # Fetch tile # T1.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
