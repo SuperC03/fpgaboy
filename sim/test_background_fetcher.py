@@ -97,7 +97,7 @@ def check_outputs(
             f"Expected {[bin(pixel) for pixel in pixels_out]}, got {dut.pixels_out.value}"
         )
     
-# @cocotb.test()
+@cocotb.test()
 async def test_reset(dut):
     """Tests the background fetcher reset."""
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
@@ -106,12 +106,12 @@ async def test_reset(dut):
     await setup(dut)
     check_outputs(dut, 0, False, 0, False)
 
-
 @cocotb.test()
 async def test_nonpush_timing(dut):
     """
-    Tests the timings for expected values with all 0 inputs, an empty bg_fifo, and 
-    valid data in being all 0s."""
+    Tests the timings for expected values with all 0 inputs, an empty bg_fifo, 
+    and valid data in being all 0s.
+    """
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
 
     await reset(dut)
@@ -155,6 +155,51 @@ async def test_nonpush_timing(dut):
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
         check_outputs(dut, None, False, (0,) * 8, True)
+
+
+@cocotb.test()
+async def test_no_valid_data(dut):
+    await reset(dut)
+    await set_inputs(
+        dut,
+        0, 0,
+        0, 0, 0b0,
+        0, 0, 0, 0b0, 0b0,
+        0b0,
+        0, 0b0,
+        0b1
+    )
+    await cocotb.start(tclk_tick(dut))
+    check_outputs(dut, 0, False, 0, False)
+
+    # Tests the fact it interprets no data as 0xFF.
+    for x in range(X_MAX):
+        # Fetch tile # T1.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        check_outputs(dut, 0x9800 + 0xFF + (x % 32), True, None, False)
+        # Fetch tile # T2.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        check_outputs(dut, None, False, None, False)
+
+        # Fetch Tile Data Low T1.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        check_outputs(dut, 0x9000 + 0xFF * 16, True, None, False)
+        # Fetch Tile Data Low T2.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        check_outputs(dut, None, False, None, False)
+
+        # Fetch Tile Data High T1.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        check_outputs(dut, 0x9001 + 0xFF * 16, True, None, False)
+        # Fetch Tile Data High T2.
+        await RisingEdge(dut.tclk_in)
+        await ClockCycles(dut.clk_in, 2, rising=False)
+        check_outputs(dut, None, False, (0xFF,) * 8, True)
 
 
 def background_fetcher_runner():
