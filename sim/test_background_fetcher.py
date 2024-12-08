@@ -343,8 +343,8 @@ def background_fetcher_runner():
     proj_path = Path(__file__).resolve().parent.parent
     sys.path.append(str(proj_path / "sim" / "model"))
     sources = [
-        proj_path / "hdl" /"evt_counter.sv",
-        proj_path / "hdl" / "pixel_fetcher.sv"
+        proj_path / "hdl" / "evt_counter.sv",
+        proj_path / "hdl" / "ppu" / "PixelFIFO" / "BackgroundFetcher.sv"
     ]
     build_test_args = ["-Wall"]
     parameters = {
