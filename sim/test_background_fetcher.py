@@ -296,6 +296,46 @@ async def test_no_bg_fifo(dut):
         check_outputs(dut, None, False, pixels, True)
 
 
+@cocotb.test()
+async def test_bg_win_switching(dut):
+    """
+    Tests that we can switch between the background and window layers.
+    """
+    cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
+    await cocotb.start(tclk_tick(dut))
+    await reset(dut)
+    await set_inputs(
+        dut,
+        0, 0,
+        0, 0, 0b0,
+        0, 0, 0, 0b0, 0b0,
+        0b0,
+        0, 0b1,
+        0b0
+    )
+    WY = 0x1F
+    WX = 15
+
+    for y in range(TOTAL_SCANLINES):
+        WY_cond: bool = y  == WY
+        X_window: int = 0
+        for x in range(X_MAX):
+            if x >= (WX - 7) and WY_cond:
+                inside_window: bool = True
+            else:
+                inside_window: bool = False
+            await set_inputs(
+                dut,
+                x, y,
+                0, 0, 0b0,
+                WY, WX, WY_cond, X_window, 0b1,
+                0b0,
+                0, 0b1,
+                0b0
+            )
+
+
+
 def background_fetcher_runner():
     """Simulate the FIFO hdl using cocotb."""
     hdl_toplevel_lang = os.getenv("HDL_TOPLEVEL_LANG", "verilog")
