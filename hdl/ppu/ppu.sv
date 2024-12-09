@@ -1,4 +1,3 @@
-
 `timescale 1ns / 1ps
 `default_nettype none
 
@@ -127,7 +126,7 @@ module PixelProcessingUnit(
 
     // Instantiates the sprite buffer.
     localparam SPRITE_BUFFER_SIZE = 10;
-    logic [7:0] sprite_buffer [$clog2(SPRITE_BUFFER_SIZE)-1:0];
+    logic [17:0] sprite_buffer [$clog2(SPRITE_BUFFER_SIZE)-1:0];
     logic [$clog2(SPRITE_BUFFER_SIZE)-1:0] n_sprites;
     // Instantiates the sprite buffer counter.
     EvtCounter #(.MAX_COUNT(SPRITE_BUFFER_SIZE+1)) spriteBufferCounter (
@@ -138,7 +137,7 @@ module PixelProcessingUnit(
     );
 
     // Instantiate the OAM scan module.
-    logic [18:0] object;
+    logic [17:0] object;
     OAMScanner #(
         .TOTAL_SCANLINES(TOTAL_SCANLINES),
         .NUM_SPRITES(NUM_SPRITES),
@@ -156,6 +155,7 @@ module PixelProcessingUnit(
         .sprite_in(sprite),
         .data_in(data_in),
         .data_valid_in(data_valid_in),
+        .n_sprites(n_sprites),
         
         .parity_in(T[0]),
 
@@ -222,7 +222,7 @@ module OAMScanner #(
     output logic add_sprite_out,
     // The item to store in the sprite buffer.
     // https://www.reddit.com/r/EmuDev/comments/1bpxuwp/gameboy_ppu_mode_2_oam_scan/
-    output logic [18:0] object_out
+    output logic [17:0] object_out
 );
     // OAM ADDR base.
     logic [15:0] OAMBase = 16'hFE00;
