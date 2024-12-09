@@ -1,5 +1,33 @@
 `default_nettype none
 
+
+module XMatcher (
+    input wire sprite_ena_in,
+    input wire [$clog2(160)-1:0] X_in,
+    input wire [17:0] sprite_buf_in,
+
+    output logic sprite_hit_out,
+    output logic [5:0] sprite_num_out,
+    output logic [3:0] sprite_row_out
+);
+    logic [7:0] sprite_X;
+    assign sprite_X = sprite_buf_in[17:10];
+    assign sprite_num_out = sprite_buf_in[9:4];
+    assign sprite_row_out = sprite_buf_in[3:0];
+
+    always_comb begin
+        if (
+            sprite_ena_in && 
+            sprite_X != 8'h0 && sprite_X <= (X_in + 8'h8)
+        ) begin
+            sprite_hit_out = 1'b1;
+        end else begin
+            sprite_hit_out = 1'b0;
+        end
+    end
+endmodule
+
+
 module SpriteFetcher #(
     parameter X_MAX = 160,
     parameter TOTAL_SCANLINES = 154
@@ -21,9 +49,9 @@ module SpriteFetcher #(
     input wire [7:0] SCX_in,
 
     // Whether sprite mode is enabled.
-    input wire sprite_mode_in,
+    input wire sprite_ena_in,
     // Access to the sprite registers.
-    input wire [7:0] sprite_buffer_in [9:0][3:0],
+    input wire [17:0] sprite_buffer_in [9:0],
     // Whether we've detected a sprite.
     output logic sprite_detected_out,
 
@@ -43,11 +71,12 @@ module SpriteFetcher #(
     output logic [1:0] pixels_out [7:0]
 );
         // Defines the 4 states that takes 2 T-cycles each.
-    typedef enum logic[1:0] {
+    typedef enum logic[2:0] {
         FetchTileNum = 0, 
         FetchTileDataLow = 1, 
         FetchTileDataHigh = 2, 
-        Push2FIFO = 3
+        Push2FIFO = 3,
+        Pause = 4
     } FetcherState;
     FetcherState state;
     // Determines whether or not we are waiting a T-cycle to advance the state.
@@ -70,7 +99,7 @@ module SpriteFetcher #(
                 pixels_out[i] = 2'h0;
             end
         end else begin
-            sprite_detected_out = sprite_detected;
+            sprite_detected_out = sprite_detected | (state != Pause);
             addr_out = addr;
             addr_valid_out = addr_valid;
             valid_pixels_out = valid_pixels;
@@ -80,12 +109,53 @@ module SpriteFetcher #(
         end
     end
 
-    // Combinational machinery to detect
+    // Decides whether any sprites are up. 
+    logic [9:0] sprite_hit;
+    logic [5:0] sprite_numbers [9:0];
+    logic [3:0] sprite_rows [9:0];
+    genvar sprite_buf_pos;
+    generate
+        for (sprite_buf_pos = 0; sprite_buf_pos < 10; sprite_buf_pos++) begin
+            XMatcher matcher (
+                .sprite_ena_in(sprite_ena_in),
+                .X_in(X_in),
+                .sprite_buf_in(sprite_buffer_in[sprite_buf_pos]),
+
+                .sprite_hit_out(sprite_hit[sprite_buf_pos]),
+                .sprite_num_out(sprite_numbers[sprite_buf_pos]),
+                .sprite_row_out(sprite_rows[sprite_buf_pos])
+            );
+        end
+    endgenerate
+
+    // Notes what sprite to render if we have a hit.
+    logic [3:0] sprite_found;
+    always_comb begin
+        sprite_found = 4'h0;       // Default value
+        sprite_detected = 1'b0;    // Default state
+        for (int i = 0; i < 10; i++) begin
+            if (sprite_hit[i] && !sprite_detected) begin
+                sprite_found = 4'(i);
+                sprite_detected = 1'b1;
+            end
+        end
+    end 
+    // Stores the sprite position for the fetcher.
+    logic [3:0] sprite_pos;
+    always_ff @(posedge clk_in) begin
+        if (rst_in) begin
+            sprite_pos <= 4'h0;
+        end else begin
+            if (tclk_in) begin
+                sprite_pos <= sprite_found;
+            end
+        end
+    end
 
     // The state evolution of the fetcher.
     always_ff @(posedge clk_in) begin
         if (rst_in) begin
-            state <= FetchTileNum;
+            state <= Pause;
             stall <= 1'b0;
             addr <= 16'h0;
             addr_valid <= 1'b0;
@@ -94,7 +164,13 @@ module SpriteFetcher #(
                 pixels[i] <= 2'h0;
             end
         end else if (tclk_in) begin
-            if (state == Push2FIFO && sprite_fifo_empty_in) begin
+            if (state == Pause && sprite_detected) begin
+                state <= FetchTileNum;
+                stall <= 1'b0;
+            end else if (state == Pause && !sprite_detected) begin
+                state <= Pause;
+                stall <= 1'b0;
+            end else if (state == Push2FIFO && sprite_fifo_empty_in) begin
                 state <= FetchTileNum;
                 stall <= 1'b0;
             end else begin
@@ -120,8 +196,6 @@ module SpriteFetcher #(
     logic [7:0] data;
     assign data = data_valid_in ? data_in : 8'hFF;
 
-    // Determines the offset from the base address to fetch the tile number from.
-    logic [7:0] y_coord;
     // Fetches the tile number to request.
     logic [7:0] tile_num;
     always_ff @(posedge clk_in) begin
@@ -130,8 +204,11 @@ module SpriteFetcher #(
         end else begin
             if (tclk_in && state == FetchTileNum) begin
                 // First cycle make address request.
-                if (sprite_detected) begin
-                    tile_num <= sprite_buffer_in[sprite][1];
+                if (!stall) begin
+                    addr_out <= 16'hFE00 + (16'(sprite_numbers[sprite_pos]) << 4);
+                    addr_valid_out <= 1'b1;
+                end else begin
+                    tile_num <= data;
                 end
             end
         end
@@ -142,7 +219,7 @@ module SpriteFetcher #(
     logic [15:0] row_base;
     always_comb begin
         tile_base = (16'h8000 + (12'(tile_num) << 4));
-        row_base = tile_base + (16'(y_coord & 3'h7) << 1);
+        row_base = tile_base + (16'(sprite_rows[sprite_pos]) << 1);
     end
     // Tracks the low byte of the tile data.
     logic [7:0] tile_data_low;
