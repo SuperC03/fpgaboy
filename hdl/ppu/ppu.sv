@@ -53,7 +53,7 @@ module PixelProcessingUnit(
     localparam X_MAX = 160;
     logic [$clog2(X_MAX)-1:0] X;
     logic pixel_pushed;
-    evt_counter #(.MAX_COUNT(X_MAX)) xCounter (
+    EvtCounter #(.MAX_COUNT(X_MAX)) xCounter (
         .clk_in(clk_in),
         .rst_in(rst_in),
         .evt_in(pixel_pushed),
@@ -62,7 +62,7 @@ module PixelProcessingUnit(
     // Keeps track of the number of T-cycles elapsed.
     localparam T_MAX = 456;
     logic [$clog2(T_MAX)-1:0] T;
-    evt_counter #(.MAX_COUNT(T_MAX)) tCounter (
+    EvtCounter #(.MAX_COUNT(T_MAX)) tCounter (
         .clk_in(tclk_in),
         .rst_in(rst_in),
         .evt_in(tclk_in),
@@ -130,7 +130,7 @@ module PixelProcessingUnit(
     logic [7:0] sprite_buffer [$clog2(SPRITE_BUFFER_SIZE)-1:0];
     logic [$clog2(SPRITE_BUFFER_SIZE)-1:0] n_sprites;
     // Instantiates the sprite buffer counter.
-    evt_counter #(.MAX_COUNT(SPRITE_BUFFER_SIZE+1)) spriteBufferCounter (
+    EvtCounter #(.MAX_COUNT(SPRITE_BUFFER_SIZE+1)) spriteBufferCounter (
         .clk_in(clk_in),
         .rst_in(rst_in),
         .evt_in(add_sprite),
@@ -138,6 +138,7 @@ module PixelProcessingUnit(
     );
 
     // Instantiate the OAM scan module.
+    logic [18:0] object;
     OAMScanner #(
         .TOTAL_SCANLINES(TOTAL_SCANLINES),
         .NUM_SPRITES(NUM_SPRITES),
@@ -159,7 +160,8 @@ module PixelProcessingUnit(
         .parity_in(T[0]),
 
         .addr_out(addr_out),
-        .add_sprite_out(add_sprite)
+        .add_sprite_out(add_sprite),
+        .object_out(object)
     );
 
     // Scans the Object Attribute Memory for relevant sprites.
@@ -167,7 +169,7 @@ module PixelProcessingUnit(
         if (state == OAMScan) begin
             // Scans a new sprite from OAM every 2 T-cycles.
             if (add_sprite) begin
-                sprite_buffer[n_sprites] <= data_in;
+                sprite_buffer[n_sprites] <= object;
             end
         end
     end
@@ -217,7 +219,10 @@ module OAMScanner #(
     // Determines what address we need to request from the OAM.
     output logic [15:0] addr_out,
     // Determines whether to add the current sprite to the sprite buffer.
-    output logic add_sprite_out
+    output logic add_sprite_out,
+    // The item to store in the sprite buffer.
+    // https://www.reddit.com/r/EmuDev/comments/1bpxuwp/gameboy_ppu_mode_2_oam_scan/
+    output logic [18:0] object_out
 );
     // OAM ADDR base.
     logic [15:0] OAMBase = 16'hFE00;
@@ -243,6 +248,8 @@ module OAMScanner #(
                 *       starts at 8 and sprites are 8 pixels wide.
                 */
                 add_sprite_out <= (data_in > 0) ? y_res && n_sprites < BUFFER_MAX : 1'b0;
+                // Notes the X coordinate for the sprite being considered.
+                object_out[17:10] = data_in;
                 // Resets the y_res signal in preparation for the next sprite.
                 y_res <= 1'b0;
             end else begin
@@ -252,10 +259,15 @@ module OAMScanner #(
                 *       so we need to add 16 to the LY register to get the screen
                 *       coordinate.
                 */
-                y_res <=(data_in <= LY_plus) &&
+                y_res <= (data_in <= LY_plus) &&
                 // Tall sprites are 16 pixels tall, while short sprites are 8 pixels tall.
                         (LY_plus < y_res + 4'h8 << tall_sprite_mode_in);
                 add_sprite_out <= 1'b0;
+                // Notes the tile row for the sprite being considered.
+                object_out[2:0] <= data_in[2:0];
+                object_out[3] <= data_in[3] & tall_sprite_mode_in;
+                // Notes the sprite number for the sprite being considered.
+                object_out[9:4] <= sprite_in;
             end
         end
     end
