@@ -38,6 +38,11 @@ module PixelProcessingUnit(
     output logic [1:0] mode_out,
     // The LY = LYC signal.
     output logic ly_eq_lyc_out
+
+    // Whether or not we're HBlank.
+    output logic hblank_out,
+    // Whether or not we're VBlank.
+    output logic vblank_out
 );
     // Enum for the different states of the PPU.
     typedef enum logic[1:0] {HBlank=0, VBlank=1, OAMScan=2, Draw=3} PPUState;
@@ -86,6 +91,7 @@ module PixelProcessingUnit(
                 ///@brief 160 pixels are drawn, variable T-cycles.
                 if (X == $clog2(X_MAX)'(X_MAX-1) && pixel_pushed) begin
                     state <= HBlank;
+                    hblank_out <= 1'b1;
                 end
             end
             /**
@@ -96,8 +102,11 @@ module PixelProcessingUnit(
                 if (T == $clog2(T_MAX)'(T_MAX-1)) begin
                     if (LY == $clog2(TOTAL_SCANLINES)'(VISIBLE_SCANLINES-1)) begin
                         state <= VBlank;
+                        hblank_out <= 1'b0;
+                        vblank_out <= 1'b1;
                     end else begin
                         state <= OAMScan;
+                        hblank_out <= 1'b0;
                     end
                 end
             end
@@ -110,6 +119,7 @@ module PixelProcessingUnit(
                     if (LY == $clog2(TOTAL_SCANLINES)'(TOTAL_SCANLINES-1)) begin
                         state <= OAMScan;
                         LY <= $clog2(TOTAL_SCANLINES)'(0);
+                        vblank_out <= 1'b0;
                     end else begin
                         LY <= LY + $clog2(TOTAL_SCANLINES)'(1);
                     end
@@ -154,7 +164,7 @@ module PixelProcessingUnit(
 
         .sprite_in(sprite),
         .data_in(data_in),
-        .data_valid_in(data_valid_in),
+        .data_valid_in(tclk_in && data_valid_in),
         .n_sprites(n_sprites),
         
         .parity_in(T[0]),
@@ -163,7 +173,6 @@ module PixelProcessingUnit(
         .add_sprite_out(add_sprite),
         .object_out(object)
     );
-
     // Scans the Object Attribute Memory for relevant sprites.
     always_ff @(posedge tclk_in) begin
         if (state == OAMScan) begin
@@ -174,6 +183,7 @@ module PixelProcessingUnit(
         end
     end
 
+    // Defines the PixelFIFO.
     // Pushes pixels to the LCD.
     always_ff @(posedge tclk_in) begin
         if (state == Draw) begin

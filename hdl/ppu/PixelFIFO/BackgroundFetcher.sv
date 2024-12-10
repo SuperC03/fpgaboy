@@ -3,6 +3,9 @@
 // Fetches the background tiles from memory.
 // https://gbdev.io/pandocs/pixel_fifo.html
 // https://hacktix.github.io/GBEDG/ppu/#background-pixel-fetching
+/**
+* @note Everything in this module has a 100Mhz clock cycle delay of 1 from I to O.
+*/
 module BackgroundFetcher #(
     parameter X_MAX = 160,
     parameter TOTAL_SCANLINES = 154
@@ -247,6 +250,7 @@ module BackgroundFetcher #(
                     tile_data_high <= data;
                     // Mixes the low and high bytes to form the pixel output.
                     valid_pixels <= bg_fifo_empty_in;
+                    // Pushes the data out MSB first.
                     for (int i = 0; i < 8; i++) begin
                         pixels[i] <= {
                             data[7-i], tile_data_low[7-i]
@@ -263,6 +267,7 @@ module BackgroundFetcher #(
         if (tclk_in && state == Push2FIFO) begin
             // Mixes the low and high bytes to form the pixel output.
             valid_pixels <= bg_fifo_empty_in;
+            // Pushes the data out MSB first.
             for (int i = 0; i < 8; i++) begin
                 pixels[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
             end

@@ -217,6 +217,10 @@ module SpriteFetcher #(
     // Tracks the address base of the tile.
     logic [15:0] tile_base;
     logic [15:0] row_base;
+    /** @note
+    * Vertical flipping of bg is a CGB only feature:
+    * https://gbdev.io/pandocs/pixel_fifo.html
+    */
     always_comb begin
         tile_base = (16'h8000 + (12'(tile_num) << 4));
         row_base = tile_base + (16'(sprite_rows[sprite_pos]) << 1);
