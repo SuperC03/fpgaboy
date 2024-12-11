@@ -176,14 +176,17 @@ module SpriteFetcher #(
                 state <= FetchTileNum;
                 stall <= 1'b0;
                 sprite_detected_out <= 1'b1;
+                valid_pixels <= 1'b0;
             end else if (state == Pause && !sprite_detected) begin
                 state <= Pause;
                 stall <= 1'b0;
                 sprite_detected_out <= 1'b0;
+                valid_pixels <= 1'b0;
             end else if (state == Push2FIFO && sprite_fifo_empty_in) begin
                 state <= Pause;
                 stall <= 1'b0;
                 sprite_detected_out <= 1'b0;
+                valid_pixels <= 1'b1;
             end else begin
                 if (stall) begin
                     case (state)
@@ -299,8 +302,6 @@ module SpriteFetcher #(
                     addr_valid <= 1'b1;
                 end else begin
                     tile_data_high <= data;
-                    // Mixes the low and high bytes to form the pixel output.
-                    valid_pixels <= sprite_fifo_empty_in;
                     for (int i = 0; i < 8; i++) begin
                         pixels[i] <= {
                             data[flags[5] ? 3'h7-i : i], tile_data_low[flags[5] ? 3'h7-i : i]
@@ -314,9 +315,7 @@ module SpriteFetcher #(
 
     // Push2FIFO state logic.
     always_ff @(posedge clk_in) begin
-        if (tclk_in && state == Push2FIFO) begin
-            // Mixes the low and high bytes to form the pixel output.
-            valid_pixels <= sprite_fifo_empty_in;
+        if (!rst_in && tclk_in && state == Push2FIFO) begin
             for (int i = 0; i < 8; i++) begin
                 pixels[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
             end

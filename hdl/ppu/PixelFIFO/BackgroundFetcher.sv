@@ -116,11 +116,15 @@ module BackgroundFetcher #(
                 state <= FetchTileNum;
                 stall <= 1'b0;
                 mem_busy_out <= 1'b1;
+                valid_pixels <= 1'b0;
             end else if (state == Pause && sprite_hit_in) begin
                 state <= Pause;
                 stall <= 1'b0;
+                mem_busy_out <= 1'b0;
+                valid_pixels <= 1'b0;
             end else if (state == Push2FIFO && bg_fifo_empty_in) begin
                 state <= sprite_hit_in ? FetchTileNum : Pause;
+                valid_pixels <= bg_fifo_empty_in;
                 stall <= 1'b0;
                 mem_busy_out <= sprite_hit_in ? 1'b0 : 1'b1;
             end else begin
@@ -134,6 +138,7 @@ module BackgroundFetcher #(
                         end
                         FetchTileDataHigh: begin
                             state <= bg_fifo_empty_in ? FetchTileNum : Push2FIFO;
+                            valid_pixels <= bg_fifo_empty_in;
                             mem_busy_out <= 1'b0;
                         end
                     endcase
@@ -212,8 +217,6 @@ module BackgroundFetcher #(
                     // Address request for the tile number.
                     addr <= base_addr + tile_offset;
                     addr_valid <= 1'b1;
-                    // Resets pixel_valid_out as it just sent the last row.
-                    valid_pixels <= 1'b0;
                 // Second cycle save the tile number.
                 end else begin
                     tile_num <= data;
@@ -264,8 +267,6 @@ module BackgroundFetcher #(
                     addr_valid <= 1'b1;
                 end else begin
                     tile_data_high <= data;
-                    // Mixes the low and high bytes to form the pixel output.
-                    valid_pixels <= bg_fifo_empty_in;
                     // Pushes the data out MSB first.
                     for (int i = 0; i < 8; i++) begin
                         pixels[i] <= {
@@ -280,9 +281,7 @@ module BackgroundFetcher #(
 
     // Push2FIFO state logic.
     always_ff @(posedge clk_in) begin
-        if (tclk_in && state == Push2FIFO) begin
-            // Mixes the low and high bytes to form the pixel output.
-            valid_pixels <= bg_fifo_empty_in;
+        if (!rst_in && tclk_in && state == Push2FIFO) begin
             // Pushes the data out MSB first.
             for (int i = 0; i < 8; i++) begin
                 pixels[i] <= {tile_data_high[7-i], tile_data_low[7-i]};

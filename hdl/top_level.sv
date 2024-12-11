@@ -6,7 +6,9 @@ module fpgaboy(
     input wire          clk_100mhz,
     // Switches
     input wire [15:0]   sw,
-    input wire [3:0]    btn
+    input wire [3:0]    btn,
+    // LED outputs.
+    output wire [15:0]  led
     // hdmi port
     // output logic [2:0]  hdmi_tx_p, //hdmi output signals (positives) (blue, green, red)
     // output logic [2:0]  hdmi_tx_n, //hdmi output signals (negatives) (blue, green, red)
@@ -145,6 +147,13 @@ module fpgaboy(
         // Whether or not we're VBlank.
         .vblank_out(vblank)
     );
+
+    // Writes out the pixel to the HDMI port.
+    assign led[0] = pixel[0];
+    assign led[1] = pixel[1];
+    assign led[2] = pixel_valid;
+    assign led[3] = hblank;
+    assign led[4] = vblank;
 
     // Assigns some default values to just get something on screen.
     assign LCDC = sw[7:0];
