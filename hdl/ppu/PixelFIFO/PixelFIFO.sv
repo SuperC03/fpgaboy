@@ -65,11 +65,6 @@ module PixelFIFO #(
     logic bg_addr_valid;
     logic bg_data_valid;
     logic bg_mem_hog;
-    // Assigns the bg_data_valid signal iff the bg owns the memory.
-    always_comb begin
-        bg_data_valid = data_valid_in && !sprite_detected;
-    end
-
     // Signals from the sprite FIFO.
     logic sprite_detected;
     logic [1:0] obj_pixel;
@@ -79,6 +74,10 @@ module PixelFIFO #(
     logic obj_data_valid;
     logic obj_palette;
     logic sprite_priority;
+    // Assigns the bg_data_valid signal iff the bg owns the memory.
+    always_comb begin
+        bg_data_valid = data_valid_in && !sprite_detected;
+    end
 
     // Signal to wait for the sprite FIFO to finish.
     logic pause;

@@ -21,8 +21,19 @@ if {[llength $files] != 0} {
     puts "$outputDir is empty"
 }
 
-# read in all system verilog files:
-set sources_sv [ glob ./hdl/*.sv ]
+# Recursively searches for all files in the hdl directory and reads them in
+# https://stackoverflow.com/questions/11104940/tcl-deep-recursive-file-search-search-for-files-with-c-extension
+proc ::findFiles { baseDir pattern } {
+  set dirs [ glob -nocomplain -type d [ file join $baseDir * ] ]
+  set files {}
+  foreach dir $dirs { 
+    lappend files {*}[ findFiles $dir $pattern ] 
+  }
+  lappend files {*}[ glob -nocomplain -type f [ file join $baseDir $pattern ] ] 
+  return $files
+}
+
+set sources_sv [ join [ findFiles ./hdl "*.sv" ] \n ]
 read_verilog -sv $sources_sv
 
 # read in all (if any) verilog files:
@@ -55,7 +66,7 @@ generate_target all [get_ips]
 synth_ip [get_ips]
 
 #Run Synthesis
-synth_design -top top_level -part $partNum -verbose
+synth_design -top fpgaboy -part $partNum -verbose
 write_checkpoint -force $outputDir/post_synth.dcp
 report_timing_summary -file $outputDir/post_synth_timing_summary.rpt
 report_utilization -file $outputDir/post_synth_util.rpt -hierarchical -hierarchical_depth 4

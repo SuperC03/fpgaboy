@@ -74,7 +74,7 @@ module BackgroundFIFO #(
     logic read;
     logic wr_en;
     always_comb begin
-        wr_en = occupancy <= $floor(DEPTH / 2);
+        wr_en = (occupancy <= (DEPTH >> 1));
         read = rd_en && (occupancy > 0);
     end
 
