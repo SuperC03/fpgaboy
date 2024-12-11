@@ -6,9 +6,8 @@ module PixelProcessingUnit(
     input wire clk_in,
     input wire rst_in,
 
-    // The T-cycle and M-cycle clocks.
+    // The T-cycle clock.
     input wire tclk_in,
-    input wire mclk_in,
     
     // The LCDC and STAT registers | $FF40 and $FF41.
     input wire [7:0] LCDC_in,
@@ -41,6 +40,7 @@ module PixelProcessingUnit(
 
     // The data to be output to the LCD.
     output logic [1:0] pixel_out,
+    output logic pixel_valid_out,
     // The mode of the PPU.
     output logic [1:0] mode_out,
     // The LY = LYC signal.
@@ -177,7 +177,6 @@ module PixelProcessingUnit(
         .rst_in(rst_in),
 
         .tclk_in(tclk_in),
-        .mclk_in(mclk_in),
 
         .LY_in(LY),
         .tall_sprite_mode_in(LCDC_in[2]),
@@ -277,6 +276,7 @@ module PixelProcessingUnit(
     end
 
     // Output the PPU-exposed signals.
+    assign pixel_valid_out = pixel_pushed;
     assign LY_out = LY;
     assign mode_out = state;
     assign ly_eq_lyc_out = (LY == LYC_in);
@@ -292,9 +292,8 @@ module OAMScanner #(
     input wire clk_in,
     input wire rst_in,
 
-    // The T and M-cycle clocks.
+    // The T cycle clock.
     input wire tclk_in,
-    input wire mclk_in,
 
     // Access wire to the LY register.
     input wire [$clog2(TOTAL_SCANLINES)-1:0] LY_in,
