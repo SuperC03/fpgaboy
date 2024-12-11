@@ -104,7 +104,6 @@ module SpriteFetcher #(
     // Holds all values to 0 on reset combinationally.
     always_comb begin
         if (rst_in) begin
-            sprite_detected_out = 1'b0;
             addr_out = 16'h0;
             addr_valid_out = 1'b0;
             valid_pixels_out = 1'b0;
@@ -112,7 +111,6 @@ module SpriteFetcher #(
                 pixels_out[i] = 2'h0;
             end
         end else begin
-            sprite_detected_out = sprite_detected | (state != Pause);
             addr_out = addr;
             addr_valid_out = addr_valid;
             valid_pixels_out = valid_pixels;
@@ -173,6 +171,7 @@ module SpriteFetcher #(
             addr <= 16'h0;
             addr_valid <= 1'b0;
             valid_pixels <= 1'b0;
+            sprite_detected_out <= 1'b0;
             for (int i = 0; i < 8; i++) begin
                 pixels[i] <= 2'h0;
             end
@@ -180,12 +179,15 @@ module SpriteFetcher #(
             if (state == Pause && sprite_detected && mem_free) begin
                 state <= FetchTileNum;
                 stall <= 1'b0;
+                sprite_detected_out <= 1'b1;
             end else if (state == Pause && !sprite_detected) begin
                 state <= Pause;
                 stall <= 1'b0;
+                sprite_detected_out <= 1'b0;
             end else if (state == Push2FIFO && sprite_fifo_empty_in) begin
-                state <= FetchTileNum;
+                state <= Pause;
                 stall <= 1'b0;
+                sprite_detected_out <= 1'b0;
             end else begin
                 if (stall) begin
                     case (state)
@@ -196,7 +198,8 @@ module SpriteFetcher #(
                             state <= FetchTileDataHigh;
                         end
                         FetchTileDataHigh: begin
-                            state <= sprite_fifo_empty_in ? FetchTileNum : Push2FIFO;
+                            state <= sprite_fifo_empty_in ? Pause : Push2FIFO;
+                            sprite_detected_out <= 1'b0;
                         end
                     endcase
                 end

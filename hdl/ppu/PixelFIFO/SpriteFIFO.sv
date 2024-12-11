@@ -51,7 +51,7 @@ module SpriteFIFO #(
     input wire [7:0] sprite_flags_in,
     input wire valid_flags_in,
     // Signal exposing the sprite palette choice for the FIFO.
-    output logic dmg_pallete_out,
+    output logic dmg_palette_out,
     // The priority of the sprite over the background.
     output logic sprite_priority_out,
 
@@ -116,7 +116,7 @@ module SpriteFIFO #(
         .sprite_flags_in(sprite_flags_in),
         .valid_flags_in(valid_flags_in),
         // Signal exposing the sprite palette choice for the FIFO.
-        .dmg_pallete_out(dmg_pallete_out),
+        .dmg_pallete_out(dmg_palette_out),
         // The priority of the sprite over the background.
         .sprite_priority_out(sprite_priority_out),
 

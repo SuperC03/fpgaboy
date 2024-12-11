@@ -3,6 +3,7 @@
 module PixelFIFO #(
     parameter X_MAX = 160,
     parameter TOTAL_SCANLINES = 154,
+    parameter WIDTH = 8,
     parameter DEPTH = 16
 ) (
     // Global clock and reset signals.
@@ -26,11 +27,6 @@ module PixelFIFO #(
     // Access to the LCDC register.
     input wire [7:0] LCDC_in,
 
-    // Access to the sprite buffer.
-    input wire [17:0] sprite_buffer_in [9:0],
-    // Handles OAM requests.
-    output logic [15:0] flag_addr_request_out,
-    output logic flag_request_out,
     // Handles data requests.
     output logic [15:0] addr_out,
     output logic addr_valid_out,
@@ -42,7 +38,19 @@ module PixelFIFO #(
     ***************************************************************************/
     // Wire for WY condition.
     input wire WY_cond_in,
-
+    // Wires for the window position registers.
+    input wire [7:0] WY_in,
+    input wire [7:0] WX_in,
+    /***************************************************************************
+    * @note SpriteFIFO signals.
+    ***************************************************************************/
+    // Access to the sprite buffer.
+    input wire [17:0] sprite_buffer_in [9:0],
+    // Handles OAM requests.
+    output logic [15:0] flag_addr_request_out,
+    output logic flag_request_out,
+    input wire [7:0] sprite_flags_in,
+    input wire valid_flags_in
 );
     // Signals from the background FIFO.
     logic [1:0] bg_pixel;
@@ -58,7 +66,29 @@ module PixelFIFO #(
 
     // Signals from the sprite FIFO.
     logic sprite_detected;
+    logic [1:0] obj_pixel;
+    logic obj_pixel_valid;
+    logic [15:0] obj_addr_out;
+    logic obj_addr_valid;
+    logic obj_data_valid;
+    logic obj_palette;
+    logic sprite_priority;
+
+    // Pipeline to delay the SpriteFIFO by 1 cycle.
+    logic tick_spriteFIFO;
+    Pipeline #(
+        .WIDTH(1),
+        .STAGES(1)
+    ) sprite_delay (
+        .clk_in(clk_in),
+        .rst_in(rst_in),
+        .data_in(tclk_in),
+        .data_out(tick_spriteFIFO)
+    );
+
     BackgroundFIFO #(
+        .WIDTH(WIDTH),
+        .DEPTH(DEPTH),
         .X_MAX(X_MAX),
         .TOTAL_SCANLINES(TOTAL_SCANLINES)
     ) background_fetcher (
@@ -71,9 +101,6 @@ module PixelFIFO #(
 
         // Wire requesting a new pixel from the FIFO. Stops when PPU is stopped.
         .rd_en(LCDC_in[7]),
-        // Wire telling the BackgroundFIFO that a sprite has been hit and to stop
-        // its own fetching.
-        .sprite_hit_in(sprite_detected),
 
         // Wire pushing a new pixel to the LCD.
         .pixel_out(bg_pixel),
@@ -111,7 +138,7 @@ module PixelFIFO #(
         // The data fetched from memory.
         .data_in(data_in),
         // The data valid signal.
-        .data_valid_in(bg_data_valid)
+        .data_valid_in(bg_data_valid),
 
         // Wire telling the BackgroundFIFO that a sprite has been hit and to stop
         // its own fetching.
@@ -120,7 +147,66 @@ module PixelFIFO #(
         .mem_busy_out(bg_mem_hog)
     );
 
-    SpriteFIFO sprite_fifo (
+    SpriteFIFO #(
+        .X_MAX(X_MAX),
+        .WIDTH(WIDTH),
+        .DEPTH(DEPTH)
+    ) sprite_fifo (
+        // Global clock and reset signals.
+        .clk_in(clk_in),
+        .rst_in(rst_in),
+
+        // The T-cycle clock.
+        .tclk_in(tick_spriteFIFO),
+
+        // Wire requesting a new pixel from the FIFO.
+        .rd_en(LCDC_in[7]),
+        // Wire telling the BackgroundFIFO that a sprite has been hit and to stop
+        // its own fetching.
+        .sprite_detected_out(sprite_detected),
+
+        // Wire pushing a new pixel to the LCD.
+        .pixel_out(obj_pixel),
+        .pixel_valid_out(obj_pixel_valid),
+
+        /***************************************************************************
+        * @note BackgroundFetcher signals.
+        ***************************************************************************/
+        // The internal X and Y position counters for screen pixel rendering coords.
+        .X_in(X_in),
+
+        // The screen position registers relative to the background.
+        .SCY_in(SCY_in),
+        .SCX_in(SCX_in),
+
+        // The sprite enable flag.
+        .sprite_ena_in(LCDC_in[1]),
+        // Access to the sprite buffer.
+        .sprite_buffer_in(sprite_buffer_in),
+        // Access to the tall-sprite mode register.
+        .tall_sprite_mode_in(LCDC_in[2]),
+
+        // Signal to rummage into the OAM and fetch the sprite flag.
+        .flag_addr_request_out(flag_addr_request_out),
+        .flag_request_out(flag_request_out),
+        // Return signal for the sprite flags.
+        .sprite_flags_in(sprite_flags_in),
+        .valid_flags_in(valid_flags_in),
+        // Signal exposing the sprite palette choice for the FIFO.
+        .dmg_palette_out(obj_palette),
+        // The priority of the sprite over the background.
+        .sprite_priority_out(sprite_priority),
+
+        // Whether the background FIFO is fetching data.
+        .mem_free(!bg_mem_hog),
+        // The address to fetch data from memory.
+        .addr_out(obj_addr_out),
+        // The valid request signal to fetch data from memory.
+        .addr_valid_out(obj_addr_valid),
+        // The data fetched from memory.
+        .data_in(data_in),
+        // The data valid signal.
+        .data_valid_in(obj_data_valid)
     );
 
 endmodule

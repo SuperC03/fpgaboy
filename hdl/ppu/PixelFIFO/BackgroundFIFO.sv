@@ -6,6 +6,7 @@
 * buffer for the PPU to read from.
 */
 module BackgroundFIFO #(
+    parameter WIDTH = 8,
     parameter DEPTH = 16,
     parameter X_MAX = 160,
     parameter TOTAL_SCANLINES = 154
@@ -143,8 +144,6 @@ module BackgroundFIFO #(
         .sprite_hit_in(sprite_hit_in),
         // Whether the BackgroundFIFO is busy.
         .mem_busy_out(mem_busy_out)
-    // Whether the BackgroundFIFO wants to assert control over the memory.
-    output logic mem_busy_out
     );
 
     always_ff @(posedge clk_in) begin

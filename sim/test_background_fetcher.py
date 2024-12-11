@@ -30,7 +30,7 @@ async def set_inputs(
     WY: int, WX: int, WY_cond: int, win_map: int, win_ena: int,
     addr_mode: int,
     data: int, data_valid: int,
-    bg_fifo_empty: int
+    bg_fifo_empty: int, 
 ):
     dut. X_in.value = X
     dut.Y_in.value = Y
