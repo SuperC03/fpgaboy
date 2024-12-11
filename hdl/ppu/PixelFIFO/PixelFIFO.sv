@@ -33,6 +33,11 @@ module PixelFIFO #(
     input wire [7:0] data_in,
     input wire data_valid_in,
 
+    // Palettes.
+    input wire [7:0] BGP_in,
+    input wire [7:0] OBP0_in,
+    input wire [7:0] OBP1_in,
+
     /***************************************************************************
     * @note BackgroundFIFO signals.
     ***************************************************************************/
@@ -74,6 +79,10 @@ module PixelFIFO #(
     logic obj_palette;
     logic sprite_priority;
 
+    // Signal to wait for the sprite FIFO to finish.
+    logic pause;
+    assign pause = sprite_detected;
+
     // Pipeline to delay the SpriteFIFO by 1 cycle.
     logic tick_spriteFIFO;
     Pipeline #(
@@ -100,7 +109,7 @@ module PixelFIFO #(
         .tclk_in(tclk_in),
 
         // Wire requesting a new pixel from the FIFO. Stops when PPU is stopped.
-        .rd_en(LCDC_in[7]),
+        .rd_en(LCDC_in[7] && !pause),
 
         // Wire pushing a new pixel to the LCD.
         .pixel_out(bg_pixel),
@@ -160,7 +169,7 @@ module PixelFIFO #(
         .tclk_in(tick_spriteFIFO),
 
         // Wire requesting a new pixel from the FIFO.
-        .rd_en(LCDC_in[7]),
+        .rd_en(LCDC_in[7] && !pause),
         // Wire telling the BackgroundFIFO that a sprite has been hit and to stop
         // its own fetching.
         .sprite_detected_out(sprite_detected),
@@ -209,6 +218,65 @@ module PixelFIFO #(
         .data_valid_in(obj_data_valid)
     );
 
+    // Memory request arbitration.
+    always_comb begin
+        if (bg_mem_hog) begin
+            addr_out = bg_addr_out;
+            addr_valid_out = bg_addr_valid;
+            obj_data_valid = 1'b0;
+            bg_data_valid = data_valid_in;
+        end else if (sprite_detected) begin
+            addr_out = obj_addr_out;
+            addr_valid_out = obj_addr_valid;
+            bg_data_valid = 1'b0;
+            obj_data_valid = data_valid_in;
+        end else begin
+            addr_out = 16'h0;
+            addr_valid_out = 1'b0;
+            obj_data_valid = 1'b0;
+            bg_data_valid = 1'b0;
+        end
+    end
+
+    // Palette resolution.
+    logic [2:0] bg_palette_position;
+    logic [2:0] obj_palette_position;
+    always_comb begin
+        bg_palette_position = 3'(bg_pixel) << 1;
+        obj_palette_position = 3'(bg_pixel) << 1;
+    end
+
+    logic [1:0] bg_pixel_palettized;
+    logic [1:0] obj_pixel_palettized;
+    assign bg_pixel_palettized = (BGP_in >> $unsigned(bg_palette_position));
+    assign obj_pixel_palettized = obj_palette ?
+        (OBP1_in >> $unsigned(obj_palette_position)) : (OBP0_in >> $unsigned(obj_palette_position));
+    
+    always_comb begin
+        if (bg_pixel_valid && obj_pixel_valid) begin
+            if (sprite_priority) begin
+                pixel_out = obj_pixel_palettized;
+                pixel_valid_out = obj_pixel_valid;
+            end else begin
+                if (bg_pixel_palettized == 2'b0) begin
+                    pixel_out = obj_pixel_palettized;
+                    pixel_valid_out = obj_pixel_valid;
+                end else begin
+                    pixel_out = bg_pixel_palettized;
+                    pixel_valid_out = bg_pixel_valid;
+                end
+            end
+        end else if (bg_pixel_valid) begin
+            pixel_out = bg_pixel_palettized;
+            pixel_valid_out = bg_pixel_valid;
+        end else if (obj_pixel_valid) begin
+            pixel_out = obj_pixel_palettized;
+            pixel_valid_out = obj_pixel_valid;
+        end else begin
+            pixel_out = 2'b0;
+            pixel_valid_out = 1'b0;
+        end
+    end
 endmodule
 
 `default_nettype wire
