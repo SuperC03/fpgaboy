@@ -1,3 +1,21 @@
-.venv/
+# build.tcl generated files
 _history/
 obj/
+
+# Test files
+sim_build/
+
+# MacOS files.
+.DS_Store
+
+# iverilog generated files
+*.out
+*.vvp
+*.vcd
+
+
+# Python virtual environments
+env/
+.env/
+venv/
+.venv/
