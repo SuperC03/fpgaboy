@@ -69,7 +69,7 @@ module BackgroundFIFO #(
     logic [WIDTH-1:0] mem [DEPTH-1:0];
     logic [$clog2(DEPTH)-1:0] rd_ptr;
     logic [2:0] wr_ptr;
-    logic [3:0] occupancy;
+    logic [$clog2(DEPTH):0] occupancy;
 
     logic read;
     logic wr_en;
@@ -147,28 +147,48 @@ module BackgroundFIFO #(
         .mem_busy_out(mem_busy_out)
     );
 
+    // New occupancy calculation.
+    logic [$clog2(DEPTH):0] next_occupancy;
+    always_comb begin
+        next_occupancy = occupancy;
+        if (tclk_fetcher_delay && valid_row && wr_en) begin
+            next_occupancy = next_occupancy + ($clog2(DEPTH) + 1)'('h8);
+        end
+        if (tclk_fetcher_delay && valid_row && read) begin
+            next_occupancy = next_occupancy - ($clog2(DEPTH) + 1)'('h1);
+        end
+    end
+
     always_ff @(posedge clk_in) begin
         // Writes to the FIFO.
-        if (tclk_fetcher_delay && valid_row && read) begin
-            /** @note
-            * Horizontal flipping of BG is a CGB only feature:
-            * https://gbdev.io/pandocs/pixel_fifo.html
-            * https://gbdev.io/pandocs/Tile_Maps.html#bg-map-attributes-cgb-mode-only
-            */
-            for (int i = 0; i < 8; i++) begin
-                mem[wr_ptr + i] <= row[i];
-            end
-            wr_ptr <= wr_ptr + $clog2(DEPTH)'('h8);
-        end
-
-        // Reads from the FIFO.
-        if (tclk_fetcher_delay && valid_row && read) begin
-            pixel_out <= mem[rd_ptr];
-            pixel_valid_out <= 1'b1;
-            rd_ptr <= (rd_ptr >= $clog2(DEPTH)'(DEPTH - 1)) ? 
-                    $clog2(DEPTH)'('h0) : rd_ptr + $clog2(DEPTH)'('h1);
+        if (rst_in) begin
+            wr_ptr <= 3'h0;
+            rd_ptr <= 3'h0;
+            occupancy <= ($clog2(DEPTH)+1)'('h0);
         end else begin
-            pixel_valid_out <= 1'b0;
+            if (tclk_fetcher_delay && valid_row && read) begin
+                /** @note
+                * Horizontal flipping of BG is a CGB only feature:
+                * https://gbdev.io/pandocs/pixel_fifo.html
+                * https://gbdev.io/pandocs/Tile_Maps.html#bg-map-attributes-cgb-mode-only
+                */
+                for (int i = 0; i < 8; i++) begin
+                    mem[wr_ptr + i] <= row[i];
+                end
+                wr_ptr <= wr_ptr + $clog2(DEPTH)'('h8);
+            end
+
+            // Reads from the FIFO.
+            if (tclk_fetcher_delay && valid_row && read) begin
+                pixel_out <= mem[rd_ptr];
+                pixel_valid_out <= 1'b1;
+                rd_ptr <= (rd_ptr >= $clog2(DEPTH)'(DEPTH - 1)) ? 
+                        $clog2(DEPTH)'('h0) : rd_ptr + $clog2(DEPTH)'('h1);
+            end else begin
+                pixel_valid_out <= 1'b0;
+            end
+
+            occupancy <= next_occupancy;
         end
     end
 endmodule

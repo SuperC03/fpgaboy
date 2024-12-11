@@ -244,7 +244,7 @@ module PixelFIFO #(
 
     logic [1:0] bg_pixel_palettized;
     logic [1:0] obj_pixel_palettized;
-    assign bg_pixel_palettized = (BGP_in >> $unsigned(bg_palette_position));
+    assign bg_pixel_palettized = LCDC_in[0] ? 2'b0 : (BGP_in >> $unsigned(bg_palette_position));
     assign obj_pixel_palettized = obj_palette ?
         (OBP1_in >> $unsigned(obj_palette_position)) : (OBP0_in >> $unsigned(obj_palette_position));
     

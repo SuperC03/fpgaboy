@@ -38,7 +38,7 @@ set_property CONFIG_VOLTAGE 3.3 [current_design]
 # set_property -dict {PACKAGE_PIN A10 IOSTANDARD LVCMOS33} [get_ports {rgb0[2]}];
 
 ## USER PUSH BUTTON
-set_property -dict {PACKAGE_PIN J2  IOSTANDARD LVCMOS33} [ get_ports "btn" ]
+set_property -dict {PACKAGE_PIN J2  IOSTANDARD LVCMOS33} [ get_ports "btn[0]" ]
 # set_property -dict {PACKAGE_PIN J1  IOSTANDARD LVCMOS33} [ get_ports "btn[1]" ]
 # set_property -dict {PACKAGE_PIN G2  IOSTANDARD LVCMOS33} [ get_ports "btn[2]" ]
 # set_property -dict {PACKAGE_PIN H2  IOSTANDARD LVCMOS33} [ get_ports "btn[3]" ]
