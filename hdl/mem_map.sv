@@ -7,6 +7,8 @@ module MemMap(
 
   input wire mclock_in,
 
+  input wire [7:0] pmoda,
+
   input wire [15:0] cpu_addr_in,
   input wire [7:0] cpu_data_in,
   input wire cpu_data_writing,
@@ -29,9 +31,10 @@ module MemMap(
   output logic [7:0] wx_out,
   // PPU Direct access to OAM memory
   input wire [15:0] oam_addr_in,
-  input wire [7:0] oam_data_out,
+  input wire [7:0] oam_data_out
 );
   // Hardware Registers (https://gbdev.io/pandocs/Hardware_Reg_List.html)
+  logic [7:0] joypad_reg;
   // 0xFF01 - 0xFF02: UNIMPLEMENTED
   // 0xFF04 - 0xFF0F: TODO
   // 0xFF10 - 0xFF3F: UNIMPLEMENTED
@@ -61,6 +64,85 @@ module MemMap(
   assign obp1_out = obp1_reg;
   assign wy_out = wy_reg;
   assign wx_out = wx_reg;
+
+  Joypad jp(
+    .clk_in(clk_in),
+    .rst_in(rst_in),
+    .sel_btns(joypad_reg[5]),
+    .sel_dpad(joypad_reg[4]),
+    .pmoda(pmoda),
+    .mtrx_out(joypad_reg[3:0])
+  );
+
+  // M-Cycle helper
+  logic prev_mclock_value;
+
+  always_ff @(posedge clk_in) begin
+    if (rst_in) begin
+      prev_mclock_value <= 0;
+      lcdc_reg <= 0;
+      lcds_reg <= 0;
+      scy_reg <= 0;
+      scx_reg <= 0;
+      obp0_reg <= 0;
+      obp1_reg <= 0;
+      wy_reg <= 0;
+      wx_reg <= 0;
+      int_reg <= 0;
+      ppu_bram_out <= 0;
+      ppu_bram_out <= 0;
+    end else begin
+      prev_mclock_value <= mclock_in;
+      // CPU (runs every M-Cycle)
+      if ((prev_mclock_value == 0) && (prev_mclock_value == 1)) begin
+        if (is_in_reg(cpu_addr_in)) begin
+          if (cpu_data_writing) begin
+            case (cpu_addr_in)
+              16'hFF00: joypad_reg[5:4] <= cpu_data_in[5:4];
+              16'hFF40: lcdc_reg <= cpu_data_in;
+              16'hFF41: lcds_reg <= cpu_data_in;
+              16'hFF42: scy_reg <= cpu_data_in;
+              16'hFF43: scx_reg <= cpu_data_in;
+              16'hFF45: lyc_reg <= cpu_data_in;
+              16'hFF47: bgp_reg <= cpu_data_in;
+              16'hFF48: obp0_reg <= cpu_data_in;
+              16'hFF49: obp1_reg <= cpu_data_in;
+              16'hFF4A: wy_reg <= cpu_data_in;
+              16'hFF4B: wx_reg <= cpu_data_in;
+              16'hFFFF: int_reg <= cpu_data_in;
+            endcase
+          end else begin
+            case (cpu_addr_in)
+              16'hFF00: cpu_data_out <= joypad_reg;
+              16'hFF40: cpu_data_out <= lcdc_reg;
+              16'hFF41: cpu_data_out <= lcds_reg;
+              16'hFF42: cpu_data_out <= scy_reg;
+              16'hFF43: cpu_data_out <= scx_reg;
+              16'hFF45: cpu_data_out <= lyc_reg;
+              16'hFF47: cpu_data_out <= bgp_reg;
+              16'hFF48: cpu_data_out <= obp0_reg;
+              16'hFF49: cpu_data_out <= obp1_reg;
+              16'hFF4A: cpu_data_out <= wy_reg;
+              16'hFF4B: cpu_data_out <= wx_reg;
+              16'hFFFF: cpu_data_out <= int_reg;
+              default: cpu_data_out <= 16'h0000;
+            endcase
+          end
+        end else if (is_in_ram(cpu_addr_in)) begin
+          // BRAM module handles conditionally writing
+          if (cpu_data_writing) begin
+            cpu_data_out <= 16'h0000;
+          end else begin
+            cpu_data_out <= cpu_bram_out;
+          end
+        end else begin
+          cpu_data_out <= 16'h0000;
+        end
+      end
+      // PPU (timing is handled by PPU, so runs every clock cycle)
+
+    end
+  end
 
   // BRAM Helpers
   logic [7:0] ppu_bram_out;
