@@ -154,7 +154,7 @@ module PixelProcessingUnit(
 
     // Instantiates the sprite buffer.
     localparam SPRITE_BUFFER_SIZE = 10;
-    logic [17:0] sprite_buffer [$clog2(SPRITE_BUFFER_SIZE)-1:0];
+    logic [17:0] sprite_buffer [SPRITE_BUFFER_SIZE-1:0];
     logic [$clog2(SPRITE_BUFFER_SIZE)-1:0] n_sprites;
     // Instantiates the sprite buffer counter.
     EvtCounter #(.MAX_COUNT(SPRITE_BUFFER_SIZE+1)) spriteBufferCounter (
