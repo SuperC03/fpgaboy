@@ -11,7 +11,7 @@ module PixelProcessingUnit(
     
     // The LCDC and STAT registers | $FF40 and $FF41.
     input wire [7:0] LCDC_in,
-    input wire [7:0] STAT_in,
+    // input wire [7:0] STAT_in, // Not used right now.
     // The SCY and SCX registers | $FF42 and $FF43.
     input wire [7:0] SCY_in,
     input wire [7:0] SCX_in,
@@ -322,8 +322,6 @@ module OAMScanner #(
     logic [15:0] OAMBase = 16'hFE00;
     // Sprite ADDR base.
     logic [15:0] spriteBase = OAMBase + (sprite_in << 2);
-    // Request the sprite data according to the parity.
-    assign addr_out = {spriteBase[15:1], parity_in};
 
     // OAM determination is broken up into two parts: Y and X.
     logic y_res;
@@ -333,36 +331,47 @@ module OAMScanner #(
     // Processes the data from the OAM.
     always_ff @(posedge clk_in) begin
         // Gets in valid data from the memory.
-        if (data_valid_in) begin
-            // If reading the X data, check if the sprite is visible.
-            if (parity_in) begin
-                // If the sprite is visible, add it to the sprite buffer.
-                /**
-                * @note Sprites are not visible if x=0 as the screen X coordinate 
-                *       starts at 8 and sprites are 8 pixels wide.
-                */
-                add_sprite_out <= (data_in > 0) ? y_res && n_sprites < BUFFER_MAX : 1'b0;
-                // Notes the X coordinate for the sprite being considered.
-                object_out[17:10] = data_in;
-                // Resets the y_res signal in preparation for the next sprite.
-                y_res <= 1'b0;
-            end else begin
-                // If reading the Y data, check if the sprite is on the current scanline.
-                /**
-                * @note The screen starts at y=16 in the sprite coordinate system,
-                *       so we need to add 16 to the LY register to get the screen
-                *       coordinate.
-                */
-                y_res <= (data_in <= LY_plus) &&
-                // Tall sprites are 16 pixels tall, while short sprites are 8 pixels tall.
-                        (LY_plus < y_res + 4'h8 << tall_sprite_mode_in);
-                add_sprite_out <= 1'b0;
-                // Notes the tile row for the sprite being considered.
-                object_out[2:0] <= data_in[2:0];
-                object_out[3] <= data_in[3] & tall_sprite_mode_in;
-                // Notes the sprite number for the sprite being considered.
-                object_out[9:4] <= sprite_in;
+        if (rst_in) begin
+            y_res <= 1'b0;
+            add_sprite_out <= 1'b0;
+            addr_out <= 16'h0;
+            addr_valid_out <= 1'b0;
+        end else if (tclk_in) begin
+            // If the data is valid, process it.
+            if (data_valid_in) begin
+                // If reading the X data, check if the sprite is visible.
+                if (parity_in) begin
+                    // If the sprite is visible, add it to the sprite buffer.
+                    /**
+                    * @note Sprites are not visible if x=0 as the screen X coordinate 
+                    *       starts at 8 and sprites are 8 pixels wide.
+                    */
+                    add_sprite_out <= (data_in > 0) ? y_res && n_sprites < BUFFER_MAX : 1'b0;
+                    // Notes the X coordinate for the sprite being considered.
+                    object_out[17:10] <= data_in;
+                    // Resets the y_res signal in preparation for the next sprite.
+                    y_res <= 1'b0;
+                end else begin
+                    // If reading the Y data, check if the sprite is on the current scanline.
+                    /**
+                    * @note The screen starts at y=16 in the sprite coordinate system,
+                    *       so we need to add 16 to the LY register to get the screen
+                    *       coordinate.
+                    */
+                    y_res <= (data_in <= LY_plus) &&
+                    // Tall sprites are 16 pixels tall, while short sprites are 8 pixels tall.
+                            (LY_plus < y_res + 4'h8 << tall_sprite_mode_in);
+                    add_sprite_out <= 1'b0;
+                    // Notes the tile row for the sprite being considered.
+                    object_out[2:0] <= data_in[2:0];
+                    object_out[3] <= data_in[3] & tall_sprite_mode_in;
+                    // Notes the sprite number for the sprite being considered.
+                    object_out[9:4] <= sprite_in;
+                end
             end
+            // Request the sprite data according to the parity.
+            addr_out <= {spriteBase[15:1], parity_in};
+            addr_valid_out <= 1'b1;
         end
     end
 endmodule

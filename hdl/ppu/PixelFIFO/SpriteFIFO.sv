@@ -34,10 +34,6 @@ module SpriteFIFO #(
     // The internal X and Y position counters for screen pixel rendering coords.
     input wire [$clog2(X_MAX)-1:0] X_in,
 
-    // The screen position registers relative to the background.
-    input wire [7:0] SCY_in,
-    input wire [7:0] SCX_in,
-
     // The sprite enable flag.
     input wire sprite_ena_in,
     // Access to the sprite buffer.
@@ -70,7 +66,7 @@ module SpriteFIFO #(
     logic [WIDTH-1:0] mem [DEPTH-1:0];
     logic [$clog2(DEPTH)-1:0] rd_ptr;
     logic [2:0] wr_ptr;
-    logic [3:0] occupancy;
+    logic [$clog2(DEPTH):0] occupancy;
 
     logic read;
     logic wr_en;
@@ -98,10 +94,6 @@ module SpriteFIFO #(
         .X_in(X_in),
         // Access to the tall-sprite mode register.
         .tall_sprite_mode_in(tall_sprite_mode_in),
-
-        // Access to the SCY and SCX registers.
-        .SCY_in(SCY_in),
-        .SCX_in(SCX_in),
 
         // Whether sprite mode is enabled.
         .sprite_ena_in(sprite_ena_in),
@@ -152,26 +144,46 @@ module SpriteFIFO #(
         .data_out(tclk_fetcher_delay)
     );
 
+    // New occupancy calculation.
+    logic [$clog2(DEPTH):0] next_occupancy;
+    always_comb begin
+        next_occupancy = occupancy;
+        if (tclk_fetcher_delay && valid_row && wr_en) begin
+            next_occupancy = next_occupancy + ($clog2(DEPTH) + 1)'('h8);
+        end
+        if (tclk_fetcher_delay && valid_row && read) begin
+            next_occupancy = next_occupancy - ($clog2(DEPTH) + 1)'('h1);
+        end
+    end
+
     // We're implicitly guaranteed that we will have the sprite flags before this
     // portion of the hardware can activate as valid_row lights up 2 T-cycles after
     // sprite_detected_out.
     always_ff @(posedge clk_in) begin
         // Writes to the FIFO.
-        if (tclk_fetcher_delay && valid_row && read) begin
-            for (int i = 0; i < 8; i++) begin
-                mem[wr_ptr + i] <= row[i];
-            end
-            wr_ptr <= wr_ptr + $clog2(DEPTH)'('h8);
-        end
-
-        // Reads from the FIFO.
-        if (tclk_fetcher_delay && valid_row && read) begin
-            pixel_out <= mem[rd_ptr];
-            pixel_valid_out <= 1'b1;
-            rd_ptr <= (rd_ptr >= $clog2(DEPTH)'(DEPTH - 1)) ? 
-                    $clog2(DEPTH)'('h0) : rd_ptr + $clog2(DEPTH)'('h1);
+        if (rst_in) begin
+            wr_ptr <= 3'h0;
+            rd_ptr <= 3'h0;
+            occupancy <= ($clog2(DEPTH)+1)'('h0);
         end else begin
-            pixel_valid_out <= 1'b0;
+            if (tclk_fetcher_delay && valid_row && wr_en) begin
+                for (int i = 0; i < 8; i++) begin
+                    mem[wr_ptr + i] <= row[i];
+                end
+                wr_ptr <= wr_ptr + $clog2(DEPTH)'('h8);
+            end
+
+            // Reads from the FIFO.
+            if (tclk_fetcher_delay && valid_row && read) begin
+                pixel_out <= mem[rd_ptr];
+                pixel_valid_out <= 1'b1;
+                rd_ptr <= (rd_ptr >= $clog2(DEPTH)'(DEPTH - 1)) ? 
+                        $clog2(DEPTH)'('h0) : rd_ptr + $clog2(DEPTH)'('h1);
+            end else begin
+                pixel_valid_out <= 1'b0;
+            end
+
+            occupancy <= next_occupancy;
         end
     end
 endmodule

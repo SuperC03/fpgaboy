@@ -184,10 +184,6 @@ module PixelFIFO #(
         // The internal X and Y position counters for screen pixel rendering coords.
         .X_in(X_in),
 
-        // The screen position registers relative to the background.
-        .SCY_in(SCY_in),
-        .SCX_in(SCX_in),
-
         // The sprite enable flag.
         .sprite_ena_in(LCDC_in[1]),
         // Access to the sprite buffer.

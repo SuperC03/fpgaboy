@@ -43,10 +43,6 @@ module SpriteFetcher #(
     // Access to the tall-sprite mode register.
     input wire tall_sprite_mode_in,
 
-    // Access to the SCY and SCX registers.
-    input wire [7:0] SCY_in,
-    input wire [7:0] SCX_in,
-
     // Whether sprite mode is enabled.
     input wire sprite_ena_in,
     // Access to the sprite registers.
