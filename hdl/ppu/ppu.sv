@@ -30,14 +30,21 @@ module PixelProcessingUnit(
 
     // The data requested from memory.
     output logic [15:0] addr_out,
+    output logic addr_valid_out,
     input wire [7:0] data_in,
     input wire data_valid_in,
+    // OAM signals.
+    output logic [15:0] oam_addr_out,
+    output logic oam_addr_valid_out,
+    input wire [7:0] oam_data_in,
+    input wire oam_data_valid_in,
+
     // The data to be output to the LCD.
-    output logic pixel_out,
+    output logic [1:0] pixel_out,
     // The mode of the PPU.
     output logic [1:0] mode_out,
     // The LY = LYC signal.
-    output logic ly_eq_lyc_out
+    output logic ly_eq_lyc_out,
 
     // Whether or not we're HBlank.
     output logic hblank_out,
@@ -76,6 +83,17 @@ module PixelProcessingUnit(
     localparam NUM_SPRITES = 40;
     localparam SPRITE_T_CYCLES = 2;
     localparam OAM_SCAN_T_CYCLES = NUM_SPRITES * SPRITE_T_CYCLES;
+    // Tracks whether the WY condition is met.
+    logic WY_cond;
+    always_ff @(posedge tclk_in) begin
+        if (rst_in) begin
+            WY_cond <= 1'b0;
+        end else if (!WY_cond) begin
+            WY_cond <= WY_in == LY;
+        end else if (VBlank) begin
+            WY_cond <= 1'b0;
+        end
+    end
 
     // Centralized state machine for the PPU.
     always_ff @(posedge tclk_in) begin
@@ -147,6 +165,8 @@ module PixelProcessingUnit(
     );
 
     // Instantiate the OAM scan module.
+    logic [15:0] oam_scan_addr_out;
+    logic oam_scan_addr_valid_out;
     logic [17:0] object;
     OAMScanner #(
         .TOTAL_SCANLINES(TOTAL_SCANLINES),
@@ -164,12 +184,14 @@ module PixelProcessingUnit(
 
         .sprite_in(sprite),
         .data_in(data_in),
-        .data_valid_in(tclk_in && data_valid_in),
+        .data_valid_in(tclk_in && data_valid_in && state == OAMScan),
         .n_sprites(n_sprites),
         
         .parity_in(T[0]),
 
-        .addr_out(addr_out),
+        .addr_out(oam_scan_addr_out),
+        .addr_valid_out(oam_scan_addr_valid_out),
+
         .add_sprite_out(add_sprite),
         .object_out(object)
     );
@@ -180,15 +202,77 @@ module PixelProcessingUnit(
             if (add_sprite) begin
                 sprite_buffer[n_sprites] <= object;
             end
+            addr_out <= oam_addr_out;
+            addr_valid_out <= oam_addr_valid_out;
         end
     end
 
     // Defines the PixelFIFO.
-    // Pushes pixels to the LCD.
+    logic [15:0] px_fifo_addr_out;
+    logic px_fifo_addr_valid_out;
+    PixelFIFO #(
+        .X_MAX(X_MAX),
+        .TOTAL_SCANLINES(TOTAL_SCANLINES),
+        .WIDTH(8),
+        .DEPTH(16)
+    ) pixelFIFO (
+        // Global clock and reset signals.
+        .clk_in(clk_in),
+        .rst_in(rst_in),
+
+        // The T-cycle clock.
+        .tclk_in(tclk_in),
+
+        // Wire telling the LCD there's a new pixel to read.
+        .pixel_out(pixel_out),
+        .pixel_valid_out(pixel_pushed),
+
+        // Access to the screen position registers.
+        .SCY_in(SCY_in),
+        .SCX_in(SCX_in),
+
+        // Access to the internal pixel-rendering position counters.
+        .X_in(X),
+        .Y_in(LY - SCY_in),
+        // Access to the LCDC register.
+        .LCDC_in(LCDC_in),
+
+        // Handles data requests.
+        .addr_out(px_fifo_addr_out),
+        .addr_valid_out(px_fifo_addr_valid_out),
+        .data_in(data_in),
+        .data_valid_in(tclk_in && data_valid_in && state == Draw),
+
+        // Palettes.
+        .BGP_in(BGP_in),
+        .OBP0_in(OBP0_in),
+        .OBP1_in(OBP1_in),
+
+        /***************************************************************************
+        * @note BackgroundFIFO signals.
+        ***************************************************************************/
+        // Wire for WY condition.
+        .WY_cond_in(WY_cond),
+        // Wires for the window position registers.
+        .WY_in(WY_in),
+        .WX_in(WX_in),
+        /***************************************************************************
+        * @note SpriteFIFO signals.
+        ***************************************************************************/
+        // Access to the sprite buffer.
+        .sprite_buffer_in(sprite_buffer),
+        // Handles OAM requests.
+        .flag_addr_request_out(oam_addr_out),
+        .flag_request_out(oam_addr_valid_out),
+        .sprite_flags_in(oam_data_in),
+        .valid_flags_in(oam_data_valid_in)
+    );
+
     always_ff @(posedge tclk_in) begin
         if (state == Draw) begin
             // Drives the output according to the pixel_fifo.
-            
+            addr_out <= px_fifo_addr_out;
+            addr_valid_out <= px_fifo_addr_valid_out;
         end
     end
 
@@ -228,6 +312,7 @@ module OAMScanner #(
 
     // Determines what address we need to request from the OAM.
     output logic [15:0] addr_out,
+    output logic addr_valid_out,
     // Determines whether to add the current sprite to the sprite buffer.
     output logic add_sprite_out,
     // The item to store in the sprite buffer.
