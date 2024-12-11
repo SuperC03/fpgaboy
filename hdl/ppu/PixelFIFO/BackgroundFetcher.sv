@@ -55,14 +55,20 @@ module BackgroundFetcher #(
     input wire bg_fifo_empty_in,
     // Pixels to push to the Background FIFO.
     output logic valid_pixels_out,
-    output logic [1:0] pixels_out [7:0]
+    output logic [1:0] pixels_out [7:0],
+
+    // Whether a sprite has been hit and to stop fetching.
+    input wire sprite_hit_in,
+    // Whether the BackgroundFIFO wants to assert control over the memory.
+    output logic mem_busy_out
 );
     // Defines the 4 states that takes 2 T-cycles each.
-    typedef enum logic[1:0] {
+    typedef enum logic[2:0] {
         FetchTileNum = 0, 
         FetchTileDataLow = 1, 
         FetchTileDataHigh = 2, 
-        Push2FIFO = 3
+        Push2FIFO = 3,
+        Pause = 4
     } FetcherState;
     FetcherState state;
     // Determines whether or not we are waiting a T-cycle to advance the state.
@@ -100,14 +106,22 @@ module BackgroundFetcher #(
             addr <= 16'h0;
             addr_valid <= 1'b0;
             valid_pixels <= 1'b0;
+            mem_busy_out <= 1'b1;
             for (int i = 0; i < 8; i++) begin
                 pixels[i] <= 2'h0;
             end
         end else if (tclk_in) begin
-
-            if (state == Push2FIFO && bg_fifo_empty_in) begin
+            if (state == Pause && !sprite_hit_in) begin
                 state <= FetchTileNum;
                 stall <= 1'b0;
+                mem_busy_out <= 1'b1;
+            end else if (state == Pause && sprite_hit_in) begin
+                state <= Pause;
+                stall <= 1'b0;
+            end else if (state == Push2FIFO && bg_fifo_empty_in) begin
+                state <= sprite_hit_in ? FetchTileNum : Pause;
+                stall <= 1'b0;
+                mem_busy_out <= sprite_hit_in ? 1'b0 : 1'b1;
             end else begin
                 if (stall) begin
                     case (state)
@@ -119,6 +133,7 @@ module BackgroundFetcher #(
                         end
                         FetchTileDataHigh: begin
                             state <= bg_fifo_empty_in ? FetchTileNum : Push2FIFO;
+                            mem_busy_out <= 1'b0;
                         end
                     endcase
                 end

@@ -29,8 +29,7 @@ endmodule
 
 
 module SpriteFetcher #(
-    parameter X_MAX = 160,
-    parameter TOTAL_SCANLINES = 154
+    parameter X_MAX = 160
 ) (
     // Standard clock and reset signals.
     input wire clk_in,
@@ -57,6 +56,8 @@ module SpriteFetcher #(
 
     // Signal to rummage into the OAM and fetch the sprite flag.
     output logic [15:0] flag_addr_request_out,
+    // Signal requesting the sprite flag.
+    output logic flag_request_out,
     // Return signal for the sprite flags.
     input wire [7:0] sprite_flags_in,
     input wire valid_flags_in,
@@ -211,6 +212,7 @@ module SpriteFetcher #(
     assign flag_addr_request_out =  16'hFE00 + 
                                     (16'(sprite_numbers[sprite_found]) << 2) + 
                                     16'h2;
+    assign flag_request_out = tclk_in && (state == FetchTileNum) && stall;
     // Pipeline to delay the T-cycle flags to wait for BRAM to respond.
     logic tclk_flags_delay;
     Pipeline #(
@@ -248,6 +250,7 @@ module SpriteFetcher #(
         end
     end
     assign dmg_pallete_out = flags[4];
+    assign sprite_priority_out = flags[7];
 
     // Tracks the address base of the tile.
     logic [15:0] tile_base;

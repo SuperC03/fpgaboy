@@ -8,8 +8,7 @@
 module SpriteFIFO #(
     parameter WIDTH = 8,
     parameter DEPTH = 16,
-    parameter X_MAX = 160,
-    parameter TOTAL_SCANLINES = 154
+    parameter X_MAX = 160
 ) (
     // Global clock and reset signals.
     input wire clk_in,
@@ -47,6 +46,7 @@ module SpriteFIFO #(
 
     // Signal to rummage into the OAM and fetch the sprite flag.
     output logic [15:0] flag_addr_request_out,
+    output logic flag_request_out,
     // Return signal for the sprite flags.
     input wire [7:0] sprite_flags_in,
     input wire valid_flags_in,
@@ -84,8 +84,7 @@ module SpriteFIFO #(
     logic [1:0] row [7:0];
     logic valid_row;
     SpriteFetcher #(
-        .X_MAX(X_MAX),
-        .TOTAL_SCANLINES(TOTAL_SCANLINES)
+        .X_MAX(X_MAX)
     ) sprite_fetcher (
         // Standard clock and reset signals.
         .clk_in(clk_in),
@@ -112,6 +111,7 @@ module SpriteFIFO #(
 
         // Signal to rummage into the OAM and fetch the sprite flag.
         .flag_addr_request_out(flag_addr_request_out),
+        .flag_request_out(flag_request_out),
         // Return signal for the sprite flags.
         .sprite_flags_in(sprite_flags_in),
         .valid_flags_in(valid_flags_in),

@@ -6,7 +6,6 @@
 * buffer for the PPU to read from.
 */
 module BackgroundFIFO #(
-    parameter WIDTH = 8,
     parameter DEPTH = 16,
     parameter X_MAX = 160,
     parameter TOTAL_SCANLINES = 154
@@ -20,9 +19,6 @@ module BackgroundFIFO #(
 
     // Wire requesting a new pixel from the FIFO.
     input wire rd_en,
-    // Wire telling the BackgroundFIFO that a sprite has been hit and to stop
-    // its own fetching.
-    input wire sprite_hit_in,
 
     // Wire pushing a new pixel to the LCD.
     output logic [1:0] pixel_out,
@@ -60,7 +56,13 @@ module BackgroundFIFO #(
     // The data fetched from memory.
     input wire [7:0] data_in,
     // The data valid signal.
-    input wire data_valid_in
+    input wire data_valid_in,
+
+    // Wire telling the BackgroundFIFO that a sprite has been hit and to stop
+    // its own fetching.
+    input wire sprite_hit_in,
+    // Wire letting the PixelFIFO know that the BackgroundFIFO is running.
+    output logic mem_busy_out
 );
     logic [WIDTH-1:0] mem [DEPTH-1:0];
     logic [$clog2(DEPTH)-1:0] rd_ptr;
@@ -135,7 +137,14 @@ module BackgroundFIFO #(
         .bg_fifo_empty_in(read),
         // Pixels to push to the Background FIFO.
         .valid_pixels_out(valid_row),
-        .pixels_out(row)
+        .pixels_out(row),
+
+        // Whether a sprite has been hit and to stop fetching.
+        .sprite_hit_in(sprite_hit_in),
+        // Whether the BackgroundFIFO is busy.
+        .mem_busy_out(mem_busy_out)
+    // Whether the BackgroundFIFO wants to assert control over the memory.
+    output logic mem_busy_out
     );
 
     always_ff @(posedge clk_in) begin
