@@ -92,7 +92,10 @@ module BackgroundFetcher #(
         end else begin
             addr_out = addr;
             addr_valid_out = addr_valid;
-            valid_pixels_out = valid_pixels;
+            valid_pixels_out = valid_pixels && !(
+                // Holds low for first clk post state transition.
+                (state == FetchTileNum) && tclk_in
+            );
             for (int i = 0; i < 8; i++) begin
                 pixels_out[i] = pixels[i];
             end
@@ -120,7 +123,7 @@ module BackgroundFetcher #(
 
     // Combinational logic determining if we are inside of a window.
     logic inside_window;
-    assign inside_window = (X_in + 7) >= WX_in && window_ena_in && WY_cond_in;
+    assign inside_window = ((X_in + 7) >= WX_in) && window_ena_in && WY_cond_in;
     // Tracks the window tile X position.
     logic [$clog2(31)-1:0] window_tile_x;
     EvtCounter #(
@@ -217,10 +220,6 @@ module BackgroundFetcher #(
             end else if (state == Push2FIFO && bg_fifo_empty_in) begin
                 state <= sprite_hit_in ? FetchTileNum : Pause;
                 // Pushes the data out MSB first.
-                for (int i = 0; i < 8; i++) begin
-                    pixels[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
-                end
-                valid_pixels <= bg_fifo_empty_in;
                 stall <= 1'b0;
                 mem_busy_out <= sprite_hit_in ? 1'b0 : 1'b1;
             end else begin
@@ -231,6 +230,7 @@ module BackgroundFetcher #(
                             // Address request for the tile number.
                             addr <= base_addr + tile_offset;
                             addr_valid <= 1'b1;
+                            valid_pixels <= 1'b0;
                         // Second cycle save the tile number and advance state.
                         end else begin
                             state <= FetchTileDataLow;
@@ -260,7 +260,7 @@ module BackgroundFetcher #(
                             state <= bg_fifo_empty_in ? FetchTileNum : Push2FIFO;
                             tile_data_high <= data;
                             // Pushes the data out MSB first.
-                            valid_pixels <= bg_fifo_empty_in;
+                            valid_pixels <= 1'b1;
                             for (int i = 0; i < 8; i++) begin
                                 pixels[i] <= {
                                     data[7-i], tile_data_low[7-i]

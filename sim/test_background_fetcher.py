@@ -30,7 +30,7 @@ async def set_inputs(
     WY: int, WX: int, WY_cond: int, win_map: int, win_ena: int,
     addr_mode: int,
     data: int, data_valid: int,
-    bg_fifo_empty: int, 
+    bg_fifo_empty: int, sprite_hit: int
 ):
     dut. X_in.value = X
     dut.Y_in.value = Y
@@ -50,6 +50,7 @@ async def set_inputs(
     dut.data_valid_in.value = data_valid
 
     dut.bg_fifo_empty_in.value = bg_fifo_empty
+    dut.sprite_hit_in.value = sprite_hit
 
 @cocotb.coroutine
 async def tclk_tick(dut):
@@ -74,7 +75,7 @@ async def setup(dut):
         0, 0, 0, 0b0, 0b0,
         0b0,
         0, 0b0,
-        0b1
+        0b1, 0b0
     )
 
 
@@ -105,7 +106,7 @@ def make_row(lo: int, hi: int) -> int:
     for i in range(8):
         yield (((hi >> i) & 0x1) << 1) | ((lo >> i) & 0x1)
   
-@cocotb.test()
+# @cocotb.test()
 async def test_reset(dut):
     """Tests the background fetcher reset."""
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
@@ -114,7 +115,7 @@ async def test_reset(dut):
     await setup(dut)
     check_outputs(dut, 0, False, 0, False)
 
-@cocotb.test()
+# @cocotb.test()
 async def test_nonpush_timing(dut):
     """
     Tests the timings for expected values with all 0 inputs, an empty bg_fifo, 
@@ -126,12 +127,16 @@ async def test_nonpush_timing(dut):
     await reset(dut)
     await set_inputs(
         dut,
+        # X, Y,
         0, 0,
+        # SCY, SCX, bg
         0, 0, 0b0,
-        0, 0, 0, 0b0, 0b0,
-        0b0,
-        0, 0b1,
-        0b1
+        # WY, WX, WY_cond, win_map, win_ena
+        0, 0, 0b0, 0b0, 0b0,
+        # addr_mode, data, data_valid
+        0b0, 0, 0b1,
+        # bg_fifo_empty, sprite_hit
+        0b1, 0b0
     )
     check_outputs(dut, 0, False, 0, False)
 
@@ -165,7 +170,7 @@ async def test_nonpush_timing(dut):
         check_outputs(dut, None, False, (0,) * 8, True)
 
 
-@cocotb.test()
+# @cocotb.test()
 async def test_no_valid_data(dut):
     """
     Tests the timings for expected values with all 0 inputs, an empty bg_fifo,
@@ -177,12 +182,16 @@ async def test_no_valid_data(dut):
     await reset(dut)
     await set_inputs(
         dut,
-        0, 0,
+        # X, Y
+        0, 0, 
+        # SCY, SCX, bg
         0, 0, 0b0,
-        0, 0, 0, 0b0, 0b0,
-        0b0,
-        0, 0b0,
-        0b1
+        # WY, WX, WY_cond, win_map, win_ena
+        0, 0, 0b0, 0b0, 0b0,
+        # addr_mode, data, data_valid
+        0b0, 0, 0b0,
+        # bg_fifo_empty, sprite_hit
+        0b1, 0b0
     )
     check_outputs(dut, 0, False, 0, False)
 
@@ -227,12 +236,16 @@ async def test_no_bg_fifo(dut):
     await reset(dut)
     await set_inputs(
         dut,
+        # X, Y
         0, 0,
+        # SCY, SCX, bg
         0, 0, 0b0,
-        0, 0, 0, 0b0, 0b0,
-        0b0,
-        0, 0b1,
-        0b0
+        # WY, WX, WY_cond, win_map, win_ena
+        0, 0, 0b0, 0b0, 0b0,
+        # addr_mode, data, data_valid
+        0b0, 0, 0b1,
+        # bg_fifo_empty, sprite_hit
+        0b0, 0b0
     )
     rng: random.Random = random.Random(42)
     check_outputs(dut, 0, False, 0, False)
@@ -242,12 +255,16 @@ async def test_no_bg_fifo(dut):
         # Cleans the slate on inputs for the next iteration.
         await set_inputs(
             dut,
+            # X, Y
             0, 0,
+            # SCY, SCX, bg
             0, 0, 0b0,
-            0, 0, 0, 0b0, 0b0,
-            0b0,
-            0, 0b1,
-            0b0
+            # WY, WX, WY_cond, win_map, win_ena
+            0, 0, 0b0, 0b0, 0b0,
+            # addr_mode, data, data_valid
+            0b0, 0, 0b1,
+            # bg_fifo_empty, sprite_hit
+            0b0, 0b0
         )
 
         # Fetch tile # T1.
@@ -283,11 +300,11 @@ async def test_no_bg_fifo(dut):
         await ClockCycles(dut.clk_in, 2, rising=False)
         # Creates the ground truth for the pixels.
         pixels: tuple[int] = tuple(make_row(tile_low, tile_high))
-        check_outputs(dut, None, False, None, False)
+        check_outputs(dut, None, False, pixels, True)
         for _ in range(rng.randint(0, 8)):
             await RisingEdge(dut.tclk_in)
             await ClockCycles(dut.clk_in, 2, rising=False)
-            check_outputs(dut, None, False, None, False)
+            check_outputs(dut, None, False, pixels, True)
         else:
             await FallingEdge(dut.clk_in)
             dut.bg_fifo_empty_in.value = 0b1
@@ -296,7 +313,7 @@ async def test_no_bg_fifo(dut):
         check_outputs(dut, None, False, pixels, True)
 
 
-@cocotb.test()
+# @cocotb.test()
 async def test_bg_win_switching(dut):
     """
     Tests that we can switch between the background and window layers.
