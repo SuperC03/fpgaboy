@@ -82,7 +82,8 @@ async def setup(dut):
 def check_outputs(
         dut, 
         addr_out: int, addr_valid_out: bool, 
-        pixels_out: tuple[int], valid_pixels_out: bool 
+        pixels_out: tuple[int], valid_pixels_out: bool,
+        mem_busy_out: bool
 ):
     """Checks the BackgroundFetcher outputs."""
     assert dut.addr_valid_out.value == addr_valid_out, (
@@ -99,6 +100,9 @@ def check_outputs(
         assert tuple(dut.pixels_out.value) == pixels_out, (
             f"Expected {[bin(pixel) for pixel in pixels_out]}, got {dut.pixels_out.value}"
         )
+    assert dut.mem_busy_out.value == mem_busy_out, (
+        f"Expected {bin(mem_busy_out)}, got {dut.mem_busy_out.value}"
+    )
 
 
 def make_row(lo: int, hi: int) -> int:
@@ -106,16 +110,16 @@ def make_row(lo: int, hi: int) -> int:
     for i in range(8):
         yield (((hi >> i) & 0x1) << 1) | ((lo >> i) & 0x1)
   
-# @cocotb.test()
+@cocotb.test()
 async def test_reset(dut):
     """Tests the background fetcher reset."""
     cocotb.start_soon(Clock(dut.clk_in, 10, units="ns").start())
     await cocotb.start(tclk_tick(dut))
 
     await setup(dut)
-    check_outputs(dut, 0, False, 0, False)
+    check_outputs(dut, 0, False, 0, False, True)
 
-# @cocotb.test()
+@cocotb.test()
 async def test_nonpush_timing(dut):
     """
     Tests the timings for expected values with all 0 inputs, an empty bg_fifo, 
@@ -138,39 +142,39 @@ async def test_nonpush_timing(dut):
         # bg_fifo_empty, sprite_hit
         0b1, 0b0
     )
-    check_outputs(dut, 0, False, 0, False)
+    check_outputs(dut, 0, False, 0, False, True)
 
     # Tests the fact it outputs an addr 2 tclk if it can write to buffer.
     for x in range(X_MAX):
         # Fetch tile # T1.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, 0x9800 + (x % 32), True, None, False)
+        check_outputs(dut, 0x9800 + (x % 32), True, None, False, True)
         # Fetch tile # T2.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, None, False, None, False)
+        check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data Low T1.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, 0x9000, True, None, False)
+        check_outputs(dut, 0x9000, True, None, False, True)
         # Fetch Tile Data Low T2.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, None, False, None, False)
+        check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data High T1.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, 0x9001, True, None, False)
+        check_outputs(dut, 0x9001, True, None, False, True)
         # Fetch Tile Data High T2.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, None, False, (0,) * 8, True)
+        check_outputs(dut, None, False, (0,) * 8, True, True)
 
 
-# @cocotb.test()
+@cocotb.test()
 async def test_no_valid_data(dut):
     """
     Tests the timings for expected values with all 0 inputs, an empty bg_fifo,
@@ -193,36 +197,36 @@ async def test_no_valid_data(dut):
         # bg_fifo_empty, sprite_hit
         0b1, 0b0
     )
-    check_outputs(dut, 0, False, 0, False)
+    check_outputs(dut, 0, False, 0, False, True)
 
     # Tests the fact it interprets no data as 0xFF.
     for x in range(X_MAX):
         # Fetch tile # T1.
         await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
         await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
-        check_outputs(dut, 0x9800 + (x % 32), True, None, False)
+        check_outputs(dut, 0x9800 + (x % 32), True, None, False, True)
         # Fetch tile # T2.
         await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
         await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
-        check_outputs(dut, None, False, None, False)
+        check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data Low T1.
         await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
         await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
-        check_outputs(dut, 0x9000 - 1 * 16, True, None, False)
+        check_outputs(dut, 0x9000 - 1 * 16, True, None, False, True)
         # Fetch Tile Data Low T2.
         await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
         await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
-        check_outputs(dut, None, False, None, False)
+        check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data High T1.
         await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
         await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
-        check_outputs(dut, 0x9001 - 1 * 16, True, None, False)
+        check_outputs(dut, 0x9001 - 1 * 16, True, None, False, True)
         # Fetch Tile Data High T2.
         await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
         await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
-        check_outputs(dut, None, False, (0x3,) * 8, True)
+        check_outputs(dut, None, False, (0x3,) * 8, True, True)
 
 
 @cocotb.test()
@@ -248,7 +252,7 @@ async def test_no_bg_fifo(dut):
         0b0, 0b0
     )
     rng: random.Random = random.Random(42)
-    check_outputs(dut, 0, False, 0, False)
+    check_outputs(dut, 0, False, 0, False, True)
 
     # Tests the fact it outputs an addr 2 tclk if it can write to buffer.
     for x in range(X_MAX):
@@ -270,28 +274,28 @@ async def test_no_bg_fifo(dut):
         # Fetch tile # T1.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, 0x9800 + (x % 32), True, None, False)
+        check_outputs(dut, 0x9800 + (x % 32), True, None, False, True)
         # Fetch tile # T2.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, None, False, None, False)
+        check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data Low T1.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, 0x9000, True, None, False)
+        check_outputs(dut, 0x9000, True, None, False, True)
         # Some random input data to test the waiting is stable.
         tile_low: int = rng.getrandbits(8)
         dut.data_in.value = tile_low
         # Fetch Tile Data Low T2.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, None, False, None, False)
+        check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data High T1.
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, 0x9001, True, None, False)
+        check_outputs(dut, 0x9001, True, None, False, True)
         # Some random input data to test the waiting is stable.
         tile_high: int = rng.getrandbits(8)
         dut.data_in.value = tile_high
@@ -300,17 +304,16 @@ async def test_no_bg_fifo(dut):
         await ClockCycles(dut.clk_in, 2, rising=False)
         # Creates the ground truth for the pixels.
         pixels: tuple[int] = tuple(make_row(tile_low, tile_high))
-        check_outputs(dut, None, False, pixels, True)
         for _ in range(rng.randint(0, 8)):
             await RisingEdge(dut.tclk_in)
             await ClockCycles(dut.clk_in, 2, rising=False)
-            check_outputs(dut, None, False, pixels, True)
+            check_outputs(dut, None, False, pixels, True, False)
         else:
             await FallingEdge(dut.clk_in)
             dut.bg_fifo_empty_in.value = 0b1
         await RisingEdge(dut.tclk_in)
         await ClockCycles(dut.clk_in, 2, rising=False)
-        check_outputs(dut, None, False, pixels, True)
+        check_outputs(dut, None, False, pixels, True, True)
 
 
 # @cocotb.test()

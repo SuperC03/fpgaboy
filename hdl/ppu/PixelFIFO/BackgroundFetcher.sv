@@ -92,10 +92,7 @@ module BackgroundFetcher #(
         end else begin
             addr_out = addr;
             addr_valid_out = addr_valid;
-            valid_pixels_out = valid_pixels && !(
-                // Holds low for first clk post state transition.
-                (state == FetchTileNum) && tclk_in
-            );
+            valid_pixels_out = valid_pixels;
             for (int i = 0; i < 8; i++) begin
                 pixels_out[i] = pixels[i];
             end
@@ -218,7 +215,7 @@ module BackgroundFetcher #(
                 mem_busy_out <= 1'b0;
                 valid_pixels <= 1'b0;
             end else if (state == Push2FIFO && bg_fifo_empty_in) begin
-                state <= sprite_hit_in ? FetchTileNum : Pause;
+                state <= sprite_hit_in ? Pause : FetchTileNum;
                 // Pushes the data out MSB first.
                 stall <= 1'b0;
                 mem_busy_out <= sprite_hit_in ? 1'b0 : 1'b1;
@@ -257,7 +254,18 @@ module BackgroundFetcher #(
                             addr_valid <= 1'b1;
                         // Second cycle save the high byte of the tile data and try to push.
                         end else begin
-                            state <= bg_fifo_empty_in ? FetchTileNum : Push2FIFO;
+                            if (bg_fifo_empty_in) begin
+                                if (sprite_hit_in) begin
+                                    state <= Pause;
+                                    mem_busy_out <= 1'b0;
+                                end else begin
+                                    state <= FetchTileNum;
+                                    mem_busy_out <= 1'b1;
+                                end
+                            end else begin
+                                state <= Push2FIFO;
+                                mem_busy_out <= 1'b0;
+                            end
                             tile_data_high <= data;
                             // Pushes the data out MSB first.
                             valid_pixels <= 1'b1;
@@ -267,7 +275,6 @@ module BackgroundFetcher #(
                                 };
                             end
                             addr_valid <= 1'b0;
-                            mem_busy_out <= 1'b0;
                         end
                     end
                 endcase
