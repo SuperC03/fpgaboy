@@ -19,14 +19,14 @@ module seven_segment_controller #(parameter COUNT_PERIOD = 100000)
   //are displayed when...
   always_comb begin
     case(segment_state)
-        8'h01: sel_values = val_in[3:0];
-        8'h02: sel_values = val_in[7:4];
-        8'h04: sel_values = val_in[11:8];
-        8'h08: sel_values = val_in[15:12];
-        8'h10: sel_values = val_in[19:16];
-        8'h20: sel_values = val_in[23:20];
-        8'h40: sel_values = val_in[27:24];
-        8'h80: sel_values = val_in[31:28];
+        8'h01: sel_values = val_in;
+        8'h02: sel_values = val_in >> 4;
+        8'h04: sel_values = val_in >> 8;
+        8'h08: sel_values = val_in >> 12;
+        8'h10: sel_values = val_in >> 16;
+        8'h20: sel_values = val_in >> 20;
+        8'h40: sel_values = val_in >> 24;
+        8'h80: sel_values = val_in >> 28;
         default: sel_values = 4'b0;
     endcase
   end
