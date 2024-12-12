@@ -34,9 +34,9 @@ module fpgaboy(
     } module_active;
     module_active state;
     // Counter to track how far along one t-cycle we are.
-    logic [$clog2(1_000_000)-1:0] t_cycle;
+    logic [$clog2(100_000)-1:0] t_cycle;
     EvtCounter #(
-        .MAX_COUNT(1_000_000)
+        .MAX_COUNT(100_000)
     ) tclk_tick (
         .clk_in(clk_100mhz),
         .rst_in(rst),

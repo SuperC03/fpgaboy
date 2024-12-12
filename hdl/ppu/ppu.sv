@@ -132,6 +132,7 @@ module PixelProcessingUnit(
                             state <= OAMScan;
                             hblank_out <= 1'b0;
                         end
+                        LY <= LY + $clog2(TOTAL_SCANLINES)'(1);
                     end
                 end
                 /**
