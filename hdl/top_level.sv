@@ -3,14 +3,19 @@
 
 module fpgaboy(
     // Clock signal.s
-    input wire          clk_100mhz,
+    input wire          clk_100mhz, //100 MHz onboard clock
     // Switches
-    input wire [15:0]   sw,
-    input wire [3:0]    btn,
+    input wire [15:0]   sw,         //all 16 input slide switches
+    input wire [3:0]    btn,        //all four momentary button switches
     // LED outputs.
-    output wire [15:0]  led,
-    output wire [2:0]   rgb0,
-    output wire [2:0]   rgb1
+    output wire [15:0]  led,        //16 green output LEDs (located right above switches)
+    output wire [2:0]   rgb0,       //RGB channels of RGB LED0
+    output wire [2:0]   rgb1,       //RGB channels of RGB LED1
+    // Seven segment display.
+    output logic [3:0] ss0_an,      //anode control for upper four digits of seven-seg display
+    output logic [3:0] ss1_an,      //anode control for lower four digits of seven-seg display
+    output logic [6:0] ss0_c,       //cathode controls for the segments of upper four digits
+    output logic [6:0] ss1_c        //cathode controls for the segments of lower four digits
     // hdmi port
     // output logic [2:0]  hdmi_tx_p, //hdmi output signals (positives) (blue, green, red)
     // output logic [2:0]  hdmi_tx_n, //hdmi output signals (negatives) (blue, green, red)
@@ -155,6 +160,18 @@ module fpgaboy(
     // Turns off the annoying rgb leds.
     assign rgb0 = 3'b000;
     assign rgb1 = 3'b000;
+
+    // Writes out the requested address to the seven segment display.
+    logic [6:0] ss_c;
+    seven_segment_controller mssc(
+        .clk_in(clk_100mhz),
+        .rst_in(rst),
+        .val_in({LCDC, STAT, ppu_addr[15:0]}),
+        .cat_out(ss_c),
+        .an_out({ss0_an, ss1_an})
+    );
+    assign ss0_c = ss_c[6:0];
+    assign ss1_c = ss_c[6:0];
 
     // Assigns some default values to just get something on screen.
     assign LCDC = sw[7:0];
