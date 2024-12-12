@@ -34,26 +34,27 @@ module fpgaboy(
     } module_active;
     module_active state;
     // Counter to track how far along one t-cycle we are.
-    logic [4:0] t_cycle;
+    logic [$clog2(1_000)-1:0] t_cycle;
     EvtCounter #(
-        .MAX_COUNT(25)
+        .MAX_COUNT(1_000)
     ) tclk_tick (
         .clk_in(clk_100mhz),
         .rst_in(rst),
-        .evt_in(clk_100mhz),
+        .evt_in(1'b1),
         .count_out(t_cycle)
     );
-    always_ff @(posedge clk_100mhz) begin
-        case (t_cycle)
-            5'd0: state <= CPU;
-            5'd8: state <= PPU;
-            5'd16: state <= MEM;
-            5'd24: state <= SETTLE;
-        endcase
-    end
-    // Individual tclk drivers.
+    // always_ff @(posedge clk_100mhz) begin
+    //     case (t_cycle)
+    //         5'd0: state <= CPU;
+    //         5'd8: state <= PPU;
+    //         5'd16: state <= MEM;
+    //         5'd24: state <= SETTLE;
+    //     endcase
+    // end
+    // // Individual tclk drivers.
     logic ppu_tclk;
-    assign ppu_tclk = state == PPU && ((t_cycle & 3'h7) == 3'h0);
+    // assign ppu_tclk = state == PPU && ((t_cycle & 3'h7) == 3'h0);
+    assign ppu_tclk = 1'b1;
 
     /***************************************************************************
     * @note CPU signals.
@@ -167,7 +168,7 @@ module fpgaboy(
         .clk_in(clk_100mhz),
         .rst_in(rst),
         // .val_in({LCDC, STAT, ppu_addr[15:0]}),
-        .val_in({16'h0, LCDC, STAT}),
+        .val_in({8'h0, LYC, LCDC, STAT}),
         .cat_out(ss_c),
         .an_out({ss0_an, ss1_an})
     );
@@ -176,6 +177,7 @@ module fpgaboy(
 
     // Assigns some default values to just get something on screen.
     assign LCDC = sw[7:0];
+    assign LYC = sw[15:8];
     assign STAT[7:3] = 5'b00000;
     always_comb begin
         mem_data = 8'hB3;
@@ -189,7 +191,6 @@ module fpgaboy(
         SCX = 8'h00;
         WY = 8'h00;
         WX = 8'h00;
-        LYC = 8'h00;
     end
 
 endmodule
