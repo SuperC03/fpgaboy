@@ -20,22 +20,38 @@ module cpu (
   output logic mem_write
 );
 
-  // CPU Registers
-  logic [15:0] af_reg; // Accumulator and Flags registers
-  logic [15:0] bc_reg; // B and C registers
-  logic [15:0] de_reg; // D and E registers
-  logic [15:0] hl_reg; // H and L registers
-  logic [15:0] sp_reg; // Stack Pointer register
-  logic [15:0] pc_reg; // Program Counter register
+  logic [7:0] a_reg; // Accumulator Register
+  logic [7:0] b_reg; // B Register
+  logic [7:0] c_reg; // C Register
+  logic [7:0] d_reg; // D Register
+  logic [7:0] e_reg; // E Register
+  logic [7:0] f_reg; // Flags Register
+  logic [7:0] h_reg; // H Register
+  logic [7:0] l_reg; // L Register
+  logic [7:0] sp_reg; // Stack Pointer Register
+  logic [7:0] pc_reg; // Program Counter Register
+
+  // Current OpCode being executed (default is 0x00, NOP, in the unprefixed set)
+  logic [7:0] current_code;
+
+  // Flag if the current code was prefixed with 
+  logic cb_prefixed;
+
+  // Flag if the next code should be retrived (allowing for overlap command execution)
+  logic prefetch_next_code;
 
   always_ff @(clk_in) begin
     if (rst_in) begin
-      af_reg <= 0;
-      bc_reg <= 0;
-      de_reg <= 0;
-      hl_reg <= 0;
+      a_reg <= 0;
+      b_reg <= 0;
+      b_reg <= 0;
+      c_reg <= 0;
+      d_reg <= 0;
+      e_reg <= 0;
+      f_reg <= 0;
+      h_reg <= 0;
+      l_reg <= 0;
       sp_reg <= 0;
-      pc_reg <= 0;
     end else begin
       case (param)
         
