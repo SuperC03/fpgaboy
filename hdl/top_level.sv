@@ -168,7 +168,7 @@ module fpgaboy(
         .clk_in(clk_100mhz),
         .rst_in(rst),
         // .val_in({LCDC, STAT, ppu_addr[15:0]}),
-        .val_in({8'h0, LYC, LCDC, STAT}),
+        .val_in({ppu_addr, LYC, STAT}),
         .cat_out(ss_c),
         .an_out({ss0_an, ss1_an})
     );

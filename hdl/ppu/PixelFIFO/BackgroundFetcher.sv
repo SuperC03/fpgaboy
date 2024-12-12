@@ -99,55 +99,9 @@ module BackgroundFetcher #(
         end
     end
 
-    // The state evolution of the fetcher.
-    always_ff @(posedge clk_in) begin
-        if (rst_in) begin
-            state <= FetchTileNum;
-            stall <= 1'b0;
-            addr <= 16'h0;
-            addr_valid <= 1'b0;
-            valid_pixels <= 1'b0;
-            mem_busy_out <= 1'b1;
-            for (int i = 0; i < 8; i++) begin
-                pixels[i] <= 2'h0;
-            end
-        end else if (tclk_in) begin
-            if (state == Pause && !sprite_hit_in) begin
-                state <= FetchTileNum;
-                stall <= 1'b0;
-                mem_busy_out <= 1'b1;
-                valid_pixels <= 1'b0;
-            end else if (state == Pause && sprite_hit_in) begin
-                state <= Pause;
-                stall <= 1'b0;
-                mem_busy_out <= 1'b0;
-                valid_pixels <= 1'b0;
-            end else if (state == Push2FIFO && bg_fifo_empty_in) begin
-                state <= sprite_hit_in ? FetchTileNum : Pause;
-                valid_pixels <= bg_fifo_empty_in;
-                stall <= 1'b0;
-                mem_busy_out <= sprite_hit_in ? 1'b0 : 1'b1;
-            end else begin
-                if (stall) begin
-                    case (state)
-                        FetchTileNum: begin
-                            state <= FetchTileDataLow;
-                        end
-                        FetchTileDataLow: begin
-                            state <= FetchTileDataHigh;
-                        end
-                        FetchTileDataHigh: begin
-                            state <= bg_fifo_empty_in ? FetchTileNum : Push2FIFO;
-                            valid_pixels <= bg_fifo_empty_in;
-                            mem_busy_out <= 1'b0;
-                        end
-                    endcase
-                end
-                stall <= ~stall;
-            end
-        end
-    end
-
+    /***********************************************************************
+    * @note FetchTileNum cobminational logic.
+    ***********************************************************************/
     // Whether or not to advance X position.
     logic advance_x;
     assign advance_x = tclk_in && bg_fifo_empty_in && (
@@ -205,27 +159,12 @@ module BackgroundFetcher #(
         y_coord = inside_window ? window_y : ((SCY_in + Y_in) & 8'hFF);
         tile_offset = 10'(x_coord) + (10'(y_coord >> 3) << 5);
     end
-    // Fetches the tile number to request.
+    // Represents the tile number fetched from memory.
     logic [7:0] tile_num;
-    always_ff @(posedge clk_in) begin
-        if (rst_in) begin
-            tile_num <= 8'h0;
-        end else begin
-            if (tclk_in && state == FetchTileNum) begin
-                // First cycle make address request.
-                if (!stall) begin
-                    // Address request for the tile number.
-                    addr <= base_addr + tile_offset;
-                    addr_valid <= 1'b1;
-                // Second cycle save the tile number.
-                end else begin
-                    tile_num <= data;
-                    addr_valid <= 1'b0;
-                end
-            end
-        end
-    end
 
+    /***********************************************************************
+    * @note FetchTileDataLow logic
+    ***********************************************************************/
     // Tracks the address base of the tile.
     logic [15:0] tile_base;
     logic [15:0] row_base;
@@ -235,56 +174,104 @@ module BackgroundFetcher #(
             (16'h9000 + (12'($signed(tile_num)) << 4));
         row_base = tile_base + (16'(y_coord & 3'h7) << 1);
     end
-    // Tracks the low byte of the tile data.
+    // Represents the low byte of the tile data.
     logic [7:0] tile_data_low;
-    always_ff @(posedge clk_in) begin
-        if (rst_in) begin
-            tile_data_low <= 8'h0;
-        end else begin
-            if (tclk_in && state == FetchTileDataLow) begin
-                // First cycle make address request.
-                if (!stall) begin
-                    addr <= row_base;
-                    addr_valid <= 1'b1;
-                end else begin
-                    tile_data_low <= data;
-                    addr_valid <= 1'b0;
-                end
-            end
-        end
-    end
 
+    /***********************************************************************
+    * @note FetchTileDataHigh logic
+    ***********************************************************************/
     // Tracks the high byte of the tile data.
     logic [7:0] tile_data_high;
+
+    // The state evolution of the fetcher.
     always_ff @(posedge clk_in) begin
         if (rst_in) begin
-            tile_data_high <= 8'h0;
-        end else begin
-            if (tclk_in && state == FetchTileDataHigh) begin
-                // First cycle make address request.
-                if (!stall) begin
-                    addr <= row_base + 16'b1;
-                    addr_valid <= 1'b1;
-                end else begin
-                    tile_data_high <= data;
-                    // Pushes the data out MSB first.
-                    for (int i = 0; i < 8; i++) begin
-                        pixels[i] <= {
-                            data[7-i], tile_data_low[7-i]
-                        };
-                    end
-                    addr_valid <= 1'b0;
-                end
-            end
-        end
-    end
+            state <= FetchTileNum;
+            stall <= 1'b0;
+            addr <= 16'h0;
+            addr_valid <= 1'b0;
+            valid_pixels <= 1'b0;
+            mem_busy_out <= 1'b1;
 
-    // Push2FIFO state logic.
-    always_ff @(posedge clk_in) begin
-        if (!rst_in && tclk_in && state == Push2FIFO) begin
-            // Pushes the data out MSB first.
+            // FetchTileNum state reset.
+            tile_num <= 8'h0;
+            // FetchTileDataLow state reset.
+            tile_data_low <= 8'h0;
+            // FetchTileDataHigh state reset.
+            tile_data_high <= 8'h0;
+            // Pixel output reset.
             for (int i = 0; i < 8; i++) begin
-                pixels[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
+                pixels[i] <= 2'h0;
+            end
+        end else if (tclk_in) begin
+            if (state == Pause && !sprite_hit_in) begin
+                state <= FetchTileNum;
+                stall <= 1'b0;
+                mem_busy_out <= 1'b1;
+                valid_pixels <= 1'b0;
+            end else if (state == Pause && sprite_hit_in) begin
+                state <= Pause;
+                stall <= 1'b0;
+                mem_busy_out <= 1'b0;
+                valid_pixels <= 1'b0;
+            end else if (state == Push2FIFO && bg_fifo_empty_in) begin
+                state <= sprite_hit_in ? FetchTileNum : Pause;
+                // Pushes the data out MSB first.
+                for (int i = 0; i < 8; i++) begin
+                    pixels[i] <= {tile_data_high[7-i], tile_data_low[7-i]};
+                end
+                valid_pixels <= bg_fifo_empty_in;
+                stall <= 1'b0;
+                mem_busy_out <= sprite_hit_in ? 1'b0 : 1'b1;
+            end else begin
+                case (state)
+                    FetchTileNum: begin
+                        // First cycle make address request.
+                        if (!stall) begin
+                            // Address request for the tile number.
+                            addr <= base_addr + tile_offset;
+                            addr_valid <= 1'b1;
+                        // Second cycle save the tile number and advance state.
+                        end else begin
+                            state <= FetchTileDataLow;
+                            tile_num <= data;
+                            addr_valid <= 1'b0;
+                        end
+                    end
+                    FetchTileDataLow: begin
+                        // First cycle make address request.
+                        if (!stall) begin
+                            addr <= row_base;
+                            addr_valid <= 1'b1;
+                        // Second cycle save the low byte of the tile data and advance state.
+                        end else begin
+                            state <= FetchTileDataHigh;
+                            addr_valid <= 1'b0;
+                            tile_data_low <= data;
+                        end
+                    end
+                    FetchTileDataHigh: begin
+                        valid_pixels <= bg_fifo_empty_in;
+                        mem_busy_out <= 1'b0;
+                        // First cycle make address request.
+                        if (!stall) begin
+                            addr <= row_base + 16'b1;
+                            addr_valid <= 1'b1;
+                        // Second cycle save the high byte of the tile data and try to push.
+                        end else begin
+                            state <= bg_fifo_empty_in ? FetchTileNum : Push2FIFO;
+                            tile_data_high <= data;
+                            // Pushes the data out MSB first.
+                            for (int i = 0; i < 8; i++) begin
+                                pixels[i] <= {
+                                    data[7-i], tile_data_low[7-i]
+                                };
+                            end
+                            addr_valid <= 1'b0;
+                        end
+                    end
+                endcase
+                stall <= ~stall;
             end
         end
     end

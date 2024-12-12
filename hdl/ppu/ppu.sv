@@ -110,6 +110,8 @@ module PixelProcessingUnit(
                     if (T == $clog2(T_MAX)'(OAM_SCAN_T_CYCLES-1)) begin
                         state <= Draw;
                     end
+                    addr_out <= oam_addr_out;
+                    addr_valid_out <= oam_addr_valid_out;
                 end
                 Draw: begin
                     ///@brief 160 pixels are drawn, variable T-cycles.
@@ -117,6 +119,9 @@ module PixelProcessingUnit(
                         state <= HBlank;
                         hblank_out <= 1'b1;
                     end
+                    // Drives the output according to the pixel_fifo.
+                    addr_out <= px_fifo_addr_out;
+                    addr_valid_out <= px_fifo_addr_valid_out;
                 end
                 /**
                 * @brief    HBlank portion of the scanline; for syncing pads to 
@@ -204,13 +209,13 @@ module PixelProcessingUnit(
     );
     // Scans the Object Attribute Memory for relevant sprites.
     always_ff @(posedge clk_in) begin
-        if (tclk_in && (state == OAMScan)) begin
-            // Scans a new sprite from OAM every 2 T-cycles.
-            if (add_sprite) begin
-                sprite_buffer[n_sprites] <= object;
+        if (rst_in) begin
+            for (int i = 0; i < SPRITE_BUFFER_SIZE; i++) begin
+                sprite_buffer[i] <= 18'h0;
             end
-            addr_out <= oam_addr_out;
-            addr_valid_out <= oam_addr_valid_out;
+        end else if (tclk_in && (state == OAMScan) && add_sprite) begin
+            // Scans a new sprite from OAM every 2 T-cycles.
+            sprite_buffer[n_sprites] <= object;
         end
     end
 
@@ -275,14 +280,6 @@ module PixelProcessingUnit(
         .sprite_flags_in(oam_data_in),
         .valid_flags_in(oam_data_valid_in)
     );
-
-    always_ff @(posedge clk_in) begin
-        if (tclk_in && (state == Draw)) begin
-            // Drives the output according to the pixel_fifo.
-            addr_out <= px_fifo_addr_out;
-            addr_valid_out <= px_fifo_addr_valid_out;
-        end
-    end
 
     // Output the PPU-exposed signals.
     assign pixel_valid_out = pixel_pushed;
