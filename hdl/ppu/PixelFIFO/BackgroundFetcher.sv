@@ -251,8 +251,6 @@ module BackgroundFetcher #(
                         end
                     end
                     FetchTileDataHigh: begin
-                        valid_pixels <= bg_fifo_empty_in;
-                        mem_busy_out <= 1'b0;
                         // First cycle make address request.
                         if (!stall) begin
                             addr <= row_base + 16'b1;
@@ -262,12 +260,14 @@ module BackgroundFetcher #(
                             state <= bg_fifo_empty_in ? FetchTileNum : Push2FIFO;
                             tile_data_high <= data;
                             // Pushes the data out MSB first.
+                            valid_pixels <= bg_fifo_empty_in;
                             for (int i = 0; i < 8; i++) begin
                                 pixels[i] <= {
                                     data[7-i], tile_data_low[7-i]
                                 };
                             end
                             addr_valid <= 1'b0;
+                            mem_busy_out <= 1'b0;
                         end
                     end
                 endcase
