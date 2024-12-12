@@ -166,7 +166,8 @@ module fpgaboy(
     seven_segment_controller mssc(
         .clk_in(clk_100mhz),
         .rst_in(rst),
-        .val_in({LCDC, STAT, ppu_addr[15:0]}),
+        // .val_in({LCDC, STAT, ppu_addr[15:0]}),
+        .val_in({16'h0, LCDC, STAT}),
         .cat_out(ss_c),
         .an_out({ss0_an, ss1_an})
     );
