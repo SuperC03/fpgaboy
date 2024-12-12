@@ -74,7 +74,7 @@ module PixelProcessingUnit(
     localparam T_MAX = 456;
     logic [$clog2(T_MAX)-1:0] T;
     EvtCounter #(.MAX_COUNT(T_MAX)) tCounter (
-        .clk_in(tclk_in),
+        .clk_in(clk_in),
         .rst_in(rst_in),
         .evt_in(tclk_in),
         .count_out(T)
@@ -85,7 +85,7 @@ module PixelProcessingUnit(
     localparam OAM_SCAN_T_CYCLES = NUM_SPRITES * SPRITE_T_CYCLES;
     // Tracks whether the WY condition is met.
     logic WY_cond;
-    always_ff @(posedge tclk_in) begin
+    always_ff @(posedge clk_in) begin
         if (rst_in) begin
             WY_cond <= 1'b0;
         end else if (!WY_cond) begin
@@ -96,54 +96,61 @@ module PixelProcessingUnit(
     end
 
     // Centralized state machine for the PPU.
-    always_ff @(posedge tclk_in) begin
+    always_ff @(posedge clk_in) begin
         // State evolution
-        case (state)
-            ///@brief All 40 sprites are scanned in OAM, 2 T-cycles each.
-            OAMScan: begin
-                if (T == $clog2(T_MAX)'(OAM_SCAN_T_CYCLES-1)) begin
-                    state <= Draw;
-                end
-            end
-            Draw: begin
-                ///@brief 160 pixels are drawn, variable T-cycles.
-                if (X == $clog2(X_MAX)'(X_MAX-1) && pixel_pushed) begin
-                    state <= HBlank;
-                    hblank_out <= 1'b1;
-                end
-            end
-            /**
-            * @brief    HBlank portion of the scanline; for syncing pads to 
-            *           456 T-cycles.
-            */
-            HBlank: begin
-                if (T == $clog2(T_MAX)'(T_MAX-1)) begin
-                    if (LY == $clog2(TOTAL_SCANLINES)'(VISIBLE_SCANLINES-1)) begin
-                        state <= VBlank;
-                        hblank_out <= 1'b0;
-                        vblank_out <= 1'b1;
-                    end else begin
-                        state <= OAMScan;
-                        hblank_out <= 1'b0;
+        if (rst_in) begin
+            state <= OAMScan;
+            hblank_out <= 1'b0;
+            vblank_out <= 1'b0;
+            LY <= $clog2(TOTAL_SCANLINES)'(0);
+        end else if (tclk_in) begin
+            case (state)
+                ///@brief All 40 sprites are scanned in OAM, 2 T-cycles each.
+                OAMScan: begin
+                    if (T == $clog2(T_MAX)'(OAM_SCAN_T_CYCLES-1)) begin
+                        state <= Draw;
                     end
                 end
-            end
-            /**
-            * @brief    VBlank portion of the scanline; for syncing and 10 
-            *           scanlines of VRAM and OAM access.
-            */
-            VBlank: begin
-                if (T == $clog2(T_MAX)'(T_MAX-1)) begin
-                    if (LY == $clog2(TOTAL_SCANLINES)'(TOTAL_SCANLINES-1)) begin
-                        state <= OAMScan;
-                        LY <= $clog2(TOTAL_SCANLINES)'(0);
-                        vblank_out <= 1'b0;
-                    end else begin
-                        LY <= LY + $clog2(TOTAL_SCANLINES)'(1);
+                Draw: begin
+                    ///@brief 160 pixels are drawn, variable T-cycles.
+                    if (X == $clog2(X_MAX)'(X_MAX-1) && pixel_pushed) begin
+                        state <= HBlank;
+                        hblank_out <= 1'b1;
                     end
                 end
-            end
-        endcase
+                /**
+                * @brief    HBlank portion of the scanline; for syncing pads to 
+                *           456 T-cycles.
+                */
+                HBlank: begin
+                    if (T == $clog2(T_MAX)'(T_MAX-1)) begin
+                        if (LY == $clog2(TOTAL_SCANLINES)'(VISIBLE_SCANLINES-1)) begin
+                            state <= VBlank;
+                            hblank_out <= 1'b0;
+                            vblank_out <= 1'b1;
+                        end else begin
+                            state <= OAMScan;
+                            hblank_out <= 1'b0;
+                        end
+                    end
+                end
+                /**
+                * @brief    VBlank portion of the scanline; for syncing and 10 
+                *           scanlines of VRAM and OAM access.
+                */
+                VBlank: begin
+                    if (T == $clog2(T_MAX)'(T_MAX-1)) begin
+                        if (LY == $clog2(TOTAL_SCANLINES)'(TOTAL_SCANLINES-1)) begin
+                            state <= OAMScan;
+                            LY <= $clog2(TOTAL_SCANLINES)'(0);
+                            vblank_out <= 1'b0;
+                        end else begin
+                            LY <= LY + $clog2(TOTAL_SCANLINES)'(1);
+                        end
+                    end
+                end
+            endcase
+        end
     end
 
     // Current sprite being examined.
@@ -195,8 +202,8 @@ module PixelProcessingUnit(
         .object_out(object)
     );
     // Scans the Object Attribute Memory for relevant sprites.
-    always_ff @(posedge tclk_in) begin
-        if (state == OAMScan) begin
+    always_ff @(posedge clk_in) begin
+        if (tclk_in && (state == OAMScan)) begin
             // Scans a new sprite from OAM every 2 T-cycles.
             if (add_sprite) begin
                 sprite_buffer[n_sprites] <= object;
@@ -267,8 +274,8 @@ module PixelProcessingUnit(
         .valid_flags_in(oam_data_valid_in)
     );
 
-    always_ff @(posedge tclk_in) begin
-        if (state == Draw) begin
+    always_ff @(posedge clk_in) begin
+        if (tclk_in && (state == Draw)) begin
             // Drives the output according to the pixel_fifo.
             addr_out <= px_fifo_addr_out;
             addr_valid_out <= px_fifo_addr_valid_out;
