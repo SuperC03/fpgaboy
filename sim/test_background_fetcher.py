@@ -79,6 +79,14 @@ async def setup(dut):
     )
 
 
+async def wait_for_output(dut):
+    """
+    Waits for the output to be valid 1 clk_100mhz after the tclk_in signal.
+    """
+    await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
+    await with_timeout(ClockCycles(dut.clk_in, 1, rising=False), 11, 'ns')
+
+
 def check_outputs(
         dut, 
         addr_out: int, addr_valid_out: bool, 
@@ -147,30 +155,24 @@ async def test_nonpush_timing(dut):
     # Tests the fact it outputs an addr 2 tclk if it can write to buffer.
     for x in range(X_MAX):
         # Fetch tile # T1.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, 0x9800 + (x % 32), True, None, False, True)
         # Fetch tile # T2.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data Low T1.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, 0x9000, True, None, False, True)
         # Fetch Tile Data Low T2.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data High T1.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, 0x9001, True, None, False, True)
         # Fetch Tile Data High T2.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, None, False, (0,) * 8, True, True)
 
 
@@ -202,30 +204,24 @@ async def test_no_valid_data(dut):
     # Tests the fact it interprets no data as 0xFF.
     for x in range(X_MAX):
         # Fetch tile # T1.
-        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
-        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
+        await wait_for_output(dut)
         check_outputs(dut, 0x9800 + (x % 32), True, None, False, True)
         # Fetch tile # T2.
-        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
-        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
+        await wait_for_output(dut)
         check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data Low T1.
-        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
-        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
+        await wait_for_output(dut)
         check_outputs(dut, 0x9000 - 1 * 16, True, None, False, True)
         # Fetch Tile Data Low T2.
-        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
-        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
+        await wait_for_output(dut)
         check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data High T1.
-        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
-        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
+        await wait_for_output(dut)
         check_outputs(dut, 0x9001 - 1 * 16, True, None, False, True)
         # Fetch Tile Data High T2.
-        await with_timeout(RisingEdge(dut.tclk_in), 251, 'ns')
-        await with_timeout(ClockCycles(dut.clk_in, 2, rising=False), 21, 'ns')
+        await wait_for_output(dut)
         check_outputs(dut, None, False, (0x3,) * 8, True, True)
 
 
@@ -272,47 +268,39 @@ async def test_no_bg_fifo(dut):
         )
 
         # Fetch tile # T1.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, 0x9800 + (x % 32), True, None, False, True)
         # Fetch tile # T2.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data Low T1.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, 0x9000, True, None, False, True)
         # Some random input data to test the waiting is stable.
         tile_low: int = rng.getrandbits(8)
         dut.data_in.value = tile_low
         # Fetch Tile Data Low T2.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, None, False, None, False, True)
 
         # Fetch Tile Data High T1.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, 0x9001, True, None, False, True)
         # Some random input data to test the waiting is stable.
         tile_high: int = rng.getrandbits(8)
         dut.data_in.value = tile_high
         # Fetch Tile Data High T2.
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         # Creates the ground truth for the pixels.
         pixels: tuple[int] = tuple(make_row(tile_low, tile_high))
         for _ in range(rng.randint(0, 8)):
-            await RisingEdge(dut.tclk_in)
-            await ClockCycles(dut.clk_in, 2, rising=False)
+            await wait_for_output(dut)
             check_outputs(dut, None, False, pixels, True, False)
         else:
             await FallingEdge(dut.clk_in)
             dut.bg_fifo_empty_in.value = 0b1
-        await RisingEdge(dut.tclk_in)
-        await ClockCycles(dut.clk_in, 2, rising=False)
+        await wait_for_output(dut)
         check_outputs(dut, None, False, pixels, True, True)
 
 
