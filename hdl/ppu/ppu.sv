@@ -113,7 +113,7 @@ module PixelProcessingUnit(
                 end
                 Draw: begin
                     ///@brief 160 pixels are drawn, variable T-cycles.
-                    if (X == $clog2(X_MAX)'(X_MAX-1) && pixel_pushed) begin
+                    if ((X == $clog2(X_MAX)'(X_MAX-1)) && pixel_pushed) begin
                         state <= HBlank;
                         hblank_out <= 1'b1;
                     end
@@ -216,6 +216,7 @@ module PixelProcessingUnit(
     // Defines the PixelFIFO.
     logic [15:0] px_fifo_addr_out;
     logic px_fifo_addr_valid_out;
+    assign pixel_pushed = 1'b1 && tclk_in;
     PixelFIFO #(
         .X_MAX(X_MAX),
         .TOTAL_SCANLINES(TOTAL_SCANLINES),
@@ -231,7 +232,7 @@ module PixelProcessingUnit(
 
         // Wire telling the LCD there's a new pixel to read.
         .pixel_out(pixel_out),
-        .pixel_valid_out(pixel_pushed),
+        // .pixel_valid_out(pixel_pushed),
 
         // Access to the screen position registers.
         .SCY_in(SCY_in),

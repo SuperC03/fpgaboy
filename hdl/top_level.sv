@@ -34,9 +34,9 @@ module fpgaboy(
     } module_active;
     module_active state;
     // Counter to track how far along one t-cycle we are.
-    logic [$clog2(1_000)-1:0] t_cycle;
+    logic [$clog2(1_000_000)-1:0] t_cycle;
     EvtCounter #(
-        .MAX_COUNT(1_000)
+        .MAX_COUNT(1_000_000)
     ) tclk_tick (
         .clk_in(clk_100mhz),
         .rst_in(rst),
@@ -54,7 +54,7 @@ module fpgaboy(
     // // Individual tclk drivers.
     logic ppu_tclk;
     // assign ppu_tclk = state == PPU && ((t_cycle & 3'h7) == 3'h0);
-    assign ppu_tclk = 1'b1;
+    assign ppu_tclk = t_cycle == 0;
 
     /***************************************************************************
     * @note CPU signals.
@@ -183,7 +183,7 @@ module fpgaboy(
         mem_data = 8'hB3;
         mem_data_valid = 1'b1;
         oam_data = 8'hB3;
-        oam_data_valid = 1'b0;
+        oam_data_valid = 1'b1;
         BGP = 8'b11_10_01_00;
         OBP0 = 8'b11_10_01_00;
         OBP1 = 8'b11_10_01_00;
